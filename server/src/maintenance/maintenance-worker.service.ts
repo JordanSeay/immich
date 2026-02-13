@@ -19,6 +19,7 @@ import { MaintenanceWebsocketRepository } from 'src/maintenance/maintenance-webs
 import { AppRepository } from 'src/repositories/app.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
+import { AppRestartEvent } from 'src/repositories/event.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
@@ -347,6 +348,12 @@ export class MaintenanceWorkerService {
     await this.systemMetadataRepository.set(SystemMetadataKey.MaintenanceMode, state);
 
     // => corresponds to notification.service.ts#onAppRestart
+    this.maintenanceWebsocketRepository.clientBroadcast('AppRestartV1', state);
+    this.maintenanceWebsocketRepository.serverSend('AppRestart', state);
+    this.appRepository.exitApp();
+  }
+
+  handleInternalRestart(state: AppRestartEvent): void {
     this.maintenanceWebsocketRepository.clientBroadcast('AppRestartV1', state);
     this.maintenanceWebsocketRepository.serverSend('AppRestart', state);
     this.appRepository.exitApp();

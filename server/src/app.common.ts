@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import sirv from 'sirv';
 import { excludePaths, serverVersion } from 'src/constants';
 import { MaintenanceWorkerService } from 'src/maintenance/maintenance-worker.service';
-import { WebSocketAdapter } from 'src/middleware/websocket.adapter';
+import { createWebSocketAdapter } from 'src/middleware/websocket.adapter';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { bootstrapTelemetry } from 'src/repositories/telemetry.repository';
@@ -55,7 +55,7 @@ export async function configureExpress(
   }
 
   app.setGlobalPrefix('api', { exclude: excludePaths });
-  app.useWebSocketAdapter(new WebSocketAdapter(app));
+  app.useWebSocketAdapter(await createWebSocketAdapter(app));
 
   useSwagger(app, { write: configRepository.isDev() && permitSwaggerWrite });
 
