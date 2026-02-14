@@ -1,6 +1,8 @@
 # =============================================================================
 # RDS Module - PostgreSQL Database
 # =============================================================================
+# TODO: Add lifecycle prevent_destroy to protect against accidental deletion
+# TODO: Add CloudWatch alarms for CPU, memory, storage, and connection count
 
 resource "aws_db_subnet_group" "main" {
   name       = "${var.app_name}-${var.environment}-db-subnet"

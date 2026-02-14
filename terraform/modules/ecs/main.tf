@@ -1,6 +1,9 @@
 # =============================================================================
 # ECS Module - Fargate Cluster, Task Definitions, Services
 # =============================================================================
+# TODO: Add aws_appautoscaling_target and aws_appautoscaling_policy for CPU/memory-based scaling
+# TODO: Add deployment_circuit_breaker to ECS service for auto-rollback on failed deployments
+# TODO: Add CloudWatch alarms for task failures and high error rates
 
 # --- CloudWatch Log Groups ---
 
@@ -56,6 +59,7 @@ resource "aws_ecs_task_definition" "immich_server" {
       name      = "immich-server"
       image     = "ghcr.io/immich-app/immich-server:${var.immich_version}"
       essential = true
+      # TODO: Make cpu/memory configurable via variables
       cpu       = 512
       memory    = 1024
 
@@ -71,6 +75,7 @@ resource "aws_ecs_task_definition" "immich_server" {
         [
           { name = "DB_HOSTNAME", value = var.db_hostname },
           { name = "DB_USERNAME", value = var.db_username },
+          # TODO: Use AWS Secrets Manager + container secrets block instead of plaintext
           { name = "DB_PASSWORD", value = var.db_password },
           { name = "DB_DATABASE_NAME", value = var.db_name },
           { name = "REDIS_HOSTNAME", value = var.redis_hostname },

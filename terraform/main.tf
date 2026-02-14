@@ -30,7 +30,7 @@ terraform {
   }
 
   # State stored locally for now (no remote backend until AWS is used)
-  # When ready for AWS, uncomment:
+  # TODO: Enable remote state with DynamoDB lock table for team collaboration:
   # backend "s3" {
   #   bucket         = "immich-terraform-state"
   #   key            = "immich/terraform.tfstate"

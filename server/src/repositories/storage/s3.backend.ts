@@ -1,6 +1,7 @@
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
@@ -35,6 +36,10 @@ export interface S3BackendConfig {
  * - rename = copy + delete (no atomic rename)
  * - Paths become S3 object keys
  */
+// TODO: Add structured logging for S3 operations (errors, slow ops).
+// TODO: Add a ping()/checkConnection() method for startup health checks.
+// TODO: Add presigned URL support for offloading large file downloads.
+// TODO: Make multipart upload threshold/part size configurable.
 export class S3StorageBackend implements StorageBackend {
   readonly type = 's3' as const;
   private client: S3Client;
@@ -48,6 +53,7 @@ export class S3StorageBackend implements StorageBackend {
     const clientConfig: S3ClientConfig = {
       region: config.region,
       forcePathStyle: config.forcePathStyle ?? true,
+      // TODO: Configure maxAttempts (e.g. 5) and custom retry strategy for production.
     };
 
     if (config.endpoint) {
@@ -92,6 +98,9 @@ export class S3StorageBackend implements StorageBackend {
     return '/' + path;
   }
 
+  // TODO: Use pipeline() from node:stream/promises for better error propagation.
+  // Currently if GetObjectCommand fails asynchronously, callers without an error
+  // handler may get unhandled errors.
   createReadStream(filepath: string): Readable {
     const passthrough = new PassThrough();
     const key = this.toKey(filepath);
@@ -132,9 +141,7 @@ export class S3StorageBackend implements StorageBackend {
     // but 'uploadComplete' fires when S3 has actually committed the object.
     const uploadPromise = upload.done();
 
-    uploadPromise
-      .then(() => passthrough.emit('uploadComplete'))
-      .catch((error) => passthrough.destroy(error));
+    uploadPromise.then(() => passthrough.emit('uploadComplete')).catch((error) => passthrough.destroy(error));
 
     // Attach the promise for programmatic access
     (passthrough as any).uploadPromise = uploadPromise;
@@ -144,9 +151,7 @@ export class S3StorageBackend implements StorageBackend {
 
   async readFile(filepath: string): Promise<Buffer> {
     const key = this.toKey(filepath);
-    const response = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-    );
+    const response = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
 
     if (!response.Body) {
       throw new Error(`Empty response body for key: ${key}`);
@@ -159,6 +164,11 @@ export class S3StorageBackend implements StorageBackend {
     return Buffer.concat(chunks);
   }
 
+  // TODO: The check-then-write for overwrite:false is not atomic — two concurrent
+  // writes can both succeed. Consider using S3 conditional writes (If-None-Match: *)
+  // when targeting real AWS (available since Aug 2024, not supported on LocalStack).
+  // TODO: Set ContentType using mime type detection for proper serving via
+  // presigned URLs or CloudFront.
   async writeFile(filepath: string, data: Buffer, options?: { overwrite?: boolean }): Promise<void> {
     const key = this.toKey(filepath);
 
@@ -203,9 +213,7 @@ export class S3StorageBackend implements StorageBackend {
   async unlink(filepath: string): Promise<void> {
     const key = this.toKey(filepath);
     try {
-      await this.client.send(
-        new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
-      );
+      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
     } catch (error) {
       // S3 DeleteObject doesn't throw on missing keys, but handle gracefully
       if (error instanceof NoSuchKey || error instanceof NotFound) {
@@ -220,24 +228,28 @@ export class S3StorageBackend implements StorageBackend {
     // Ensure prefix ends with /
     const dirPrefix = prefix.endsWith('/') ? prefix : prefix + '/';
 
-    // List and delete all objects under the prefix
+    // List and batch-delete all objects under the prefix.
+    // DeleteObjectsCommand supports up to 1000 keys per call.
     let continuationToken: string | undefined;
     do {
       const response = await this.client.send(
         new ListObjectsV2Command({
           Bucket: this.bucket,
           Prefix: dirPrefix,
+          MaxKeys: 1000,
           ContinuationToken: continuationToken,
         }),
       );
 
-      if (response.Contents) {
-        await Promise.all(
-          response.Contents.map((obj) =>
-            this.client.send(
-              new DeleteObjectCommand({ Bucket: this.bucket, Key: obj.Key! }),
-            ),
-          ),
+      if (response.Contents && response.Contents.length > 0) {
+        await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: {
+              Objects: response.Contents.map((obj) => ({ Key: obj.Key! })),
+              Quiet: true,
+            },
+          }),
         );
       }
 
@@ -248,12 +260,14 @@ export class S3StorageBackend implements StorageBackend {
   async checkFileExists(filepath: string, _mode?: number): Promise<boolean> {
     const key = this.toKey(filepath);
     try {
-      await this.client.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
-      );
+      await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
       return true;
     } catch (error) {
-      if (error instanceof NotFound || (error as any)?.name === 'NotFound' || (error as any)?.$metadata?.httpStatusCode === 404) {
+      if (
+        error instanceof NotFound ||
+        (error as any)?.name === 'NotFound' ||
+        (error as any)?.$metadata?.httpStatusCode === 404
+      ) {
         return false;
       }
       throw error;
@@ -262,9 +276,7 @@ export class S3StorageBackend implements StorageBackend {
 
   async stat(filepath: string): Promise<StorageFileStats> {
     const key = this.toKey(filepath);
-    const response = await this.client.send(
-      new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
-    );
+    const response = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
 
     const lastModified = response.LastModified || new Date();
     const size = response.ContentLength || 0;
@@ -306,39 +318,46 @@ export class S3StorageBackend implements StorageBackend {
     const prefix = this.toKey(dirpath);
     const dirPrefix = prefix.endsWith('/') ? prefix : prefix + '/';
 
-    const response = await this.client.send(
-      new ListObjectsV2Command({
-        Bucket: this.bucket,
-        Prefix: dirPrefix,
-        Delimiter: '/',
-      }),
-    );
-
     const files: string[] = [];
+    let continuationToken: string | undefined;
 
-    // Add files (objects directly under the prefix)
-    if (response.Contents) {
-      for (const obj of response.Contents) {
-        if (obj.Key) {
-          const name = obj.Key.slice(dirPrefix.length);
-          if (name && !name.includes('/')) {
-            files.push(name);
+    // Paginate through all results (ListObjectsV2 returns max 1000 per call)
+    do {
+      const response = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: dirPrefix,
+          Delimiter: '/',
+          ContinuationToken: continuationToken,
+        }),
+      );
+
+      // Add files (objects directly under the prefix)
+      if (response.Contents) {
+        for (const obj of response.Contents) {
+          if (obj.Key) {
+            const name = obj.Key.slice(dirPrefix.length);
+            if (name && !name.includes('/')) {
+              files.push(name);
+            }
           }
         }
       }
-    }
 
-    // Add "directories" (common prefixes)
-    if (response.CommonPrefixes) {
-      for (const prefix of response.CommonPrefixes) {
-        if (prefix.Prefix) {
-          const name = prefix.Prefix.slice(dirPrefix.length).replace(/\/$/, '');
-          if (name) {
-            files.push(name);
+      // Add "directories" (common prefixes)
+      if (response.CommonPrefixes) {
+        for (const cp of response.CommonPrefixes) {
+          if (cp.Prefix) {
+            const name = cp.Prefix.slice(dirPrefix.length).replace(/\/$/, '');
+            if (name) {
+              files.push(name);
+            }
           }
         }
       }
-    }
+
+      continuationToken = response.NextContinuationToken;
+    } while (continuationToken);
 
     return files;
   }

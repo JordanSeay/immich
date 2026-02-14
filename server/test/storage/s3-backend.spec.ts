@@ -11,10 +11,10 @@
  *   npx vitest --config test/vitest.config.storage.mjs
  */
 
-import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3';
-import { S3StorageBackend, S3BackendConfig } from 'src/repositories/storage/s3.backend';
+import { HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
 import { Readable } from 'node:stream';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { S3BackendConfig, S3StorageBackend } from 'src/repositories/storage/s3.backend';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const TEST_CONFIG: S3BackendConfig = {
   bucket: 'immich-test-media',

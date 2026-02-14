@@ -2,9 +2,8 @@ import { Injectable } from '@nestjs/common';
 import archiver from 'archiver';
 import chokidar, { ChokidarOptions } from 'chokidar';
 import { escapePath, glob, globStream } from 'fast-glob';
-import { constants, createReadStream, ReadOptionsWithBuffer } from 'node:fs';
+import { constants, ReadOptionsWithBuffer } from 'node:fs';
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
 import { createGunzip, createGzip } from 'node:zlib';
 import { CrawlOptionsDto, WalkOptionsDto } from 'src/dtos/library.dto';
@@ -126,6 +125,9 @@ export class StorageRepository {
     };
   }
 
+  // TODO: Remove direct fs import and delegate fully to backend.readFile().
+  // The local backend's readFile already handles the full read; the partial-read
+  // path here duplicates logic and couples this class to the filesystem.
   async readFile(filepath: string, options?: ReadOptionsWithBuffer<Buffer>): Promise<Buffer> {
     // For S3 backend, delegate to backend.readFile which handles the full read
     if (this.backend.type === 's3') {

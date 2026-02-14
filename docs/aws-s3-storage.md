@@ -88,16 +88,16 @@ terraform apply -var-file=environments/local.tfvars -auto-approve
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `IMMICH_STORAGE_BACKEND` | `local` | Storage backend: `local` or `s3` |
-| `IMMICH_S3_BUCKET` | — | S3 bucket name (required for S3) |
-| `IMMICH_S3_REGION` | — | AWS region (required for S3) |
-| `IMMICH_S3_ENDPOINT` | — | Custom endpoint URL (for LocalStack) |
-| `IMMICH_S3_ACCESS_KEY` | — | AWS access key (optional, uses IAM role if unset) |
-| `IMMICH_S3_SECRET_KEY` | — | AWS secret key (optional, uses IAM role if unset) |
-| `IMMICH_S3_FORCE_PATH_STYLE` | `true` | Use path-style URLs (required for LocalStack) |
-| `IMMICH_STORAGE_PREFIX` | — | Key prefix for multi-tenant isolation |
+| Variable                     | Default | Description                                       |
+| ---------------------------- | ------- | ------------------------------------------------- |
+| `IMMICH_STORAGE_BACKEND`     | `local` | Storage backend: `local` or `s3`                  |
+| `IMMICH_S3_BUCKET`           | —       | S3 bucket name (required for S3)                  |
+| `IMMICH_S3_REGION`           | —       | AWS region (required for S3)                      |
+| `IMMICH_S3_ENDPOINT`         | —       | Custom endpoint URL (for LocalStack)              |
+| `IMMICH_S3_ACCESS_KEY`       | —       | AWS access key (optional, uses IAM role if unset) |
+| `IMMICH_S3_SECRET_KEY`       | —       | AWS secret key (optional, uses IAM role if unset) |
+| `IMMICH_S3_FORCE_PATH_STYLE` | `true`  | Use path-style URLs (required for LocalStack)     |
+| `IMMICH_STORAGE_PREFIX`      | —       | Key prefix for multi-tenant isolation             |
 
 ### Switching Between Backends
 
@@ -160,13 +160,13 @@ docker-compose.test.yml            # Isolated test environment
 
 ## Testing
 
-| Suite | Command | Requires |
-|---|---|---|
-| Factory unit tests | `npm test -- src/repositories/storage/storage.factory.spec.ts` | Nothing |
-| S3 integration (22 tests) | `npm run test:storage` | LocalStack on port 4567 |
-| Terraform validate | `cd terraform && terraform validate` | Terraform CLI |
-| Terraform plan | `cd terraform && terraform plan -var-file=environments/local.tfvars` | LocalStack on port 4566 |
-| Full stack test | `./scripts/full-stack-test.sh` | Docker |
+| Suite                     | Command                                                              | Requires                |
+| ------------------------- | -------------------------------------------------------------------- | ----------------------- |
+| Factory unit tests        | `npm test -- src/repositories/storage/storage.factory.spec.ts`       | Nothing                 |
+| S3 integration (22 tests) | `npm run test:storage`                                               | LocalStack on port 4567 |
+| Terraform validate        | `cd terraform && terraform validate`                                 | Terraform CLI           |
+| Terraform plan            | `cd terraform && terraform plan -var-file=environments/local.tfvars` | LocalStack on port 4566 |
+| Full stack test           | `./scripts/full-stack-test.sh`                                       | Docker                  |
 
 ## Design Decisions
 

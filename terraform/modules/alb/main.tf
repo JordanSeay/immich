@@ -1,6 +1,8 @@
 # =============================================================================
 # ALB Module - Application Load Balancer
 # =============================================================================
+# TODO: Add aws_wafv2_web_acl_association for production (rate limiting, bot protection)
+# TODO: Add HTTPS listener with ACM certificate for production
 
 resource "aws_lb" "main" {
   name               = "${var.app_name}-${var.environment}-alb"

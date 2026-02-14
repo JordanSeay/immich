@@ -1,6 +1,10 @@
 # =============================================================================
 # S3 Module - Media Storage Bucket
 # =============================================================================
+# TODO: Add lifecycle_rule prevent_destroy to protect against accidental deletion
+# TODO: Add S3 inventory configuration for cost monitoring at scale
+# TODO: Add S3 Transfer Acceleration toggle for geo-distributed users
+# TODO: Add S3 object tagging for cost allocation and audit trails
 
 resource "aws_s3_bucket" "media" {
   bucket = "${var.app_name}-${var.environment}-${var.s3_bucket_name}"
@@ -46,7 +50,7 @@ resource "aws_s3_bucket_cors_configuration" "media" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["GET", "PUT", "POST"]
-    allowed_origins = ["*"] # Restrict in production
+    allowed_origins = ["*"] # TODO: Parameterize and restrict for production deployments
     max_age_seconds = 3600
   }
 }
