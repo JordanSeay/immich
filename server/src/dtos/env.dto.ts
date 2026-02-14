@@ -56,6 +56,37 @@ export class EnvDto {
   @Matches(/^\//, { message: 'IMMICH_MEDIA_LOCATION must be an absolute path' })
   IMMICH_MEDIA_LOCATION?: string;
 
+  @IsEnum(['local', 's3'])
+  @Optional()
+  IMMICH_STORAGE_BACKEND?: 'local' | 's3';
+
+  @IsString()
+  @Optional()
+  IMMICH_S3_BUCKET?: string;
+
+  @IsString()
+  @Optional()
+  IMMICH_S3_REGION?: string;
+
+  @IsString()
+  @Optional()
+  IMMICH_S3_ENDPOINT?: string;
+
+  @IsString()
+  @Optional()
+  IMMICH_S3_ACCESS_KEY?: string;
+
+  @IsString()
+  @Optional()
+  IMMICH_S3_SECRET_KEY?: string;
+
+  @ValidateBoolean({ optional: true })
+  IMMICH_S3_FORCE_PATH_STYLE?: boolean;
+
+  @IsString()
+  @Optional()
+  IMMICH_STORAGE_PREFIX?: string;
+
   @IsInt()
   @Optional()
   @Type(() => Number)

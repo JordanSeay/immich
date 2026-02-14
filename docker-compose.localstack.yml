@@ -1,0 +1,115 @@
+#
+# LocalStack development environment for Immich with S3 storage backend
+#
+# Usage:
+#   docker compose -f docker-compose.localstack.yml up -d
+#   ./scripts/init-localstack.sh
+#
+# This provides a local AWS-compatible environment for testing S3 storage,
+# IAM roles, and other AWS services without an AWS account.
+#
+
+name: immich-localstack
+
+services:
+  localstack:
+    container_name: immich_localstack
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566" # LocalStack Gateway (all AWS services)
+      - "4510-4559:4510-4559" # External service ports
+    environment:
+      SERVICES: s3,iam,ecs,ec2,elbv2,logs,secretsmanager
+      DEBUG: 0
+      PERSISTENCE: 1
+      LOCALSTACK_HOST: localhost
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  database:
+    container_name: immich_postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: immich
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    shm_size: 128mb
+    restart: unless-stopped
+    healthcheck:
+      test: pg_isready --dbname='immich' --username='postgres' || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: immich_redis
+    image: docker.io/valkey/valkey:9-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: redis-cli ping || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  immich-server:
+    container_name: immich_server
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    volumes:
+      - upload:/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      DB_HOSTNAME: database
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_DATABASE_NAME: immich
+      REDIS_HOSTNAME: redis
+      # S3 storage backend config (pointing to LocalStack)
+      IMMICH_STORAGE_BACKEND: ${IMMICH_STORAGE_BACKEND:-local}
+      IMMICH_S3_BUCKET: ${IMMICH_S3_BUCKET:-immich-media}
+      IMMICH_S3_REGION: ${IMMICH_S3_REGION:-us-east-1}
+      IMMICH_S3_ENDPOINT: http://localstack:4566
+      IMMICH_S3_FORCE_PATH_STYLE: "true"
+      IMMICH_S3_ACCESS_KEY: test
+      IMMICH_S3_SECRET_KEY: test
+    ports:
+      - "2283:2283"
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      disable: false
+
+  immich-machine-learning:
+    container_name: immich_machine_learning
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
+    volumes:
+      - model-cache:/cache
+    environment:
+      IMMICH_HOST: 0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      disable: false
+
+volumes:
+  localstack-data:
+  pgdata:
+  upload:
+  model-cache:

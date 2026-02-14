@@ -1,0 +1,39 @@
+# =============================================================================
+# Integration Test Environment
+# =============================================================================
+# Spins up LocalStack + dependencies for running e2e storage backend tests.
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   npm run test:e2e:storage
+#   docker compose -f docker-compose.test.yml down -v
+
+services:
+  localstack-test:
+    image: localstack/localstack:3
+    container_name: immich-localstack-test
+    ports:
+      - "4567:4566"   # Different port to avoid conflict with dev LocalStack
+    environment:
+      - SERVICES=s3
+      - DEBUG=0
+      - DEFAULT_REGION=us-east-1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "awslocal", "s3", "ls"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  localstack-test-init:
+    image: localstack/localstack:3
+    container_name: immich-localstack-test-init
+    depends_on:
+      localstack-test:
+        condition: service_healthy
+    entrypoint: ["bash", "-c", "awslocal --endpoint-url=http://localstack-test:4566 s3 mb s3://immich-test-media && awslocal --endpoint-url=http://localstack-test:4566 s3api put-bucket-versioning --bucket immich-test-media --versioning-configuration Status=Enabled && echo 'Test bucket created successfully'"]
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
