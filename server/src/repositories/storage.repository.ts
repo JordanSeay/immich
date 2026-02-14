@@ -2,8 +2,7 @@ import { Injectable } from '@nestjs/common';
 import archiver from 'archiver';
 import chokidar, { ChokidarOptions } from 'chokidar';
 import { escapePath, glob, globStream } from 'fast-glob';
-import { constants, ReadOptionsWithBuffer } from 'node:fs';
-import fs from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { PassThrough, Readable, Writable } from 'node:stream';
 import { createGunzip, createGzip } from 'node:zlib';
 import { CrawlOptionsDto, WalkOptionsDto } from 'src/dtos/library.dto';
@@ -125,30 +124,16 @@ export class StorageRepository {
     };
   }
 
-  // TODO: Remove direct fs import and delegate fully to backend.readFile().
-  // The local backend's readFile already handles the full read; the partial-read
-  // path here duplicates logic and couples this class to the filesystem.
-  async readFile(filepath: string, options?: ReadOptionsWithBuffer<Buffer>): Promise<Buffer> {
-    // For S3 backend, delegate to backend.readFile which handles the full read
-    if (this.backend.type === 's3') {
-      return this.backend.readFile(filepath);
-    }
-    // For local backend, preserve the original open/read/close behavior for partial reads
-    const file = await fs.open(filepath);
-    try {
-      const { buffer } = await file.read(options);
-      return buffer as Buffer;
-    } finally {
-      await file.close();
-    }
+  async readFile(
+    filepath: string,
+    options?: { buffer?: Buffer; position?: number | null; length?: number; offset?: number },
+  ): Promise<Buffer> {
+    return this.backend.readFile(filepath, options);
   }
 
   async readTextFile(filepath: string): Promise<string> {
-    if (this.backend.type === 's3') {
-      const buffer = await this.backend.readFile(filepath);
-      return buffer.toString('utf8');
-    }
-    return fs.readFile(filepath, 'utf8');
+    const buffer = await this.backend.readFile(filepath);
+    return buffer.toString('utf8');
   }
 
   async checkFileExists(filepath: string, mode = constants.F_OK): Promise<boolean> {

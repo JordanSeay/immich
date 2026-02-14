@@ -12,6 +12,11 @@ export interface StorageBackendOptions {
  *
  * Reads configuration from environment variables to determine which
  * backend to use (local filesystem or S3).
+ *
+ * Uses a singleton pattern — the backend is created once on first call to
+ * createFromEnv() and reused for the lifetime of the process. Configuration
+ * changes (env var updates) require a server restart to take effect.
+ * Call reset() in tests to clear the cached instance.
  */
 export class StorageBackendFactory {
   private static instance: StorageBackend | null = null;
@@ -63,7 +68,10 @@ export class StorageBackendFactory {
       const region = process.env.IMMICH_S3_REGION;
 
       if (!bucket || !region) {
-        throw new Error('S3 backend requires IMMICH_S3_BUCKET and IMMICH_S3_REGION environment variables');
+        throw new Error(
+          'S3 backend requires IMMICH_S3_BUCKET and IMMICH_S3_REGION environment variables. ' +
+            'Set IMMICH_STORAGE_BACKEND=local or provide the required S3 configuration.',
+        );
       }
 
       this.instance = this.create({

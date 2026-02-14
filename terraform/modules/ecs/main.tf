@@ -75,7 +75,8 @@ resource "aws_ecs_task_definition" "immich_server" {
         [
           { name = "DB_HOSTNAME", value = var.db_hostname },
           { name = "DB_USERNAME", value = var.db_username },
-          # TODO: Use AWS Secrets Manager + container secrets block instead of plaintext
+          # TODO(production): Move DB_PASSWORD to AWS Secrets Manager using the
+          # `secrets` block in the container definition to avoid plaintext credentials.
           { name = "DB_PASSWORD", value = var.db_password },
           { name = "DB_DATABASE_NAME", value = var.db_name },
           { name = "REDIS_HOSTNAME", value = var.redis_hostname },

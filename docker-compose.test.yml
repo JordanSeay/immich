@@ -32,7 +32,22 @@ services:
     depends_on:
       localstack-test:
         condition: service_healthy
-    entrypoint: ["bash", "-c", "awslocal --endpoint-url=http://localstack-test:4566 s3 mb s3://immich-test-media && awslocal --endpoint-url=http://localstack-test:4566 s3api put-bucket-versioning --bucket immich-test-media --versioning-configuration Status=Enabled && echo 'Test bucket created successfully'"]
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -euo pipefail
+        echo "Creating test bucket 'immich-test-media'..."
+        if ! awslocal --endpoint-url=http://localstack-test:4566 s3 mb s3://immich-test-media; then
+          echo "Error: Failed to create S3 bucket 'immich-test-media'." >&2
+          exit 1
+        fi
+        echo "Enabling versioning on bucket 'immich-test-media'..."
+        if ! awslocal --endpoint-url=http://localstack-test:4566 s3api put-bucket-versioning --bucket immich-test-media --versioning-configuration Status=Enabled; then
+          echo "Error: Failed to enable versioning on bucket 'immich-test-media'." >&2
+          exit 1
+        fi
+        echo "Test bucket created successfully"
     environment:
       - AWS_DEFAULT_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=test

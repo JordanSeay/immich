@@ -83,6 +83,7 @@ module "vpc" {
   environment     = var.environment
   vpc_cidr        = var.vpc_cidr
   use_localstack  = var.use_localstack
+  aws_region      = var.aws_region
 }
 
 module "s3" {

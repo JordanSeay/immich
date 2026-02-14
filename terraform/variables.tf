@@ -85,10 +85,10 @@ variable "db_username" {
 }
 
 variable "db_password" {
-  description = "Database master password"
+  description = "Database master password. Override with a strong password for production."
   type        = string
   sensitive   = true
-  default     = "postgres"
+  default     = "postgres" # TODO(production): Remove default; require explicit password
 }
 
 variable "rds_multi_az" {

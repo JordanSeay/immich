@@ -7,7 +7,10 @@ export default defineConfig({
     root: './',
     globals: true,
     include: ['test/storage/**/*.spec.ts'],
-    testTimeout: 30_000, // S3 ops may be slow against LocalStack
+    // S3 operations against LocalStack can be slow due to network roundtrips.
+    // Each test may perform multiple S3 API calls (write + read + cleanup).
+    // 30s is generous but prevents flaky failures in CI.
+    testTimeout: 30_000,
     server: {
       deps: {
         fallbackCJS: true,

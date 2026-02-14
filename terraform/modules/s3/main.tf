@@ -50,7 +50,9 @@ resource "aws_s3_bucket_cors_configuration" "media" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["GET", "PUT", "POST"]
-    allowed_origins = ["*"] # TODO: Parameterize and restrict for production deployments
+    # TODO(production): Replace wildcard with specific origins via a variable.
+    # For LocalStack development, wildcard is acceptable.
+    allowed_origins = var.cors_allowed_origins
     max_age_seconds = 3600
   }
 }

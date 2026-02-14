@@ -25,3 +25,9 @@ variable "use_localstack" {
   type    = bool
   default = true
 }
+
+variable "cors_allowed_origins" {
+  description = "List of allowed CORS origins. Use [\"*\"] for development only."
+  type        = list(string)
+  default     = ["*"]
+}

@@ -20,6 +20,8 @@ resource "aws_db_parameter_group" "postgres" {
   name   = "${var.app_name}-${var.environment}-pg-params"
   family = "postgres15"
 
+  # Immich uses the pgvectors extension (pgvecto.rs, library name "vectors.so").
+  # This is distinct from the pgvector extension ("vector.so").
   parameter {
     name  = "shared_preload_libraries"
     value = "vectors.so"
@@ -60,7 +62,7 @@ resource "aws_db_instance" "main" {
 
   backup_retention_period = var.use_localstack ? 0 : 7
 
-  skip_final_snapshot       = true
+  skip_final_snapshot       = var.use_localstack
   final_snapshot_identifier = "${var.app_name}-${var.environment}-db-final"
 
   tags = {

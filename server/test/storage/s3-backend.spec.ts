@@ -12,6 +12,7 @@
  */
 
 import { HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
+import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { S3BackendConfig, S3StorageBackend } from 'src/repositories/storage/s3.backend';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -58,7 +59,7 @@ function streamToBuffer(stream: Readable): Promise<Buffer> {
 }
 
 let backend: S3StorageBackend;
-const testPrefix = `test-${Date.now()}/`;
+const testPrefix = `test-${Date.now()}-${randomUUID().slice(0, 8)}/`;
 
 describe('S3StorageBackend', () => {
   beforeAll(async () => {

@@ -31,8 +31,12 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 cleanup() {
   log_info "Cleaning up..."
   cd "$TF_DIR"
-  terraform destroy -var-file=environments/local.tfvars -auto-approve 2>/dev/null || true
-  docker compose -f "$PROJECT_DIR/docker-compose.localstack.yml" down -v 2>/dev/null || true
+  if ! terraform destroy -var-file=environments/local.tfvars -auto-approve 2>/dev/null; then
+    log_warn "Terraform destroy failed during cleanup; resources may remain in LocalStack."
+  fi
+  if ! docker compose -f "$PROJECT_DIR/docker-compose.localstack.yml" down -v 2>/dev/null; then
+    log_warn "Docker compose down failed during cleanup; LocalStack containers/volumes may still be running."
+  fi
 }
 
 trap cleanup EXIT

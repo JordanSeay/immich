@@ -50,9 +50,18 @@ export class LocalStorageBackend implements StorageBackend {
     return fs.utimes(filepath, atime, mtime);
   }
 
-  async readFile(filepath: string): Promise<Buffer> {
+  async readFile(
+    filepath: string,
+    options?: { buffer?: Buffer; position?: number | null; length?: number; offset?: number },
+  ): Promise<Buffer> {
     const file = await fs.open(filepath);
     try {
+      if (options && (options.position !== undefined || options.length !== undefined)) {
+        // Partial read with explicit position/length
+        const { buffer } = await file.read(options);
+        return buffer as Buffer;
+      }
+      // Full read
       const stats = await file.stat();
       const { buffer } = await file.read({ buffer: Buffer.alloc(stats.size), offset: 0, length: stats.size });
       return buffer as Buffer;

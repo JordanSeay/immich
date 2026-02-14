@@ -26,10 +26,14 @@ export interface StorageBackend {
   createWriteStream(filepath: string): Writable;
 
   /**
-   * Read an entire file into a buffer.
+   * Read an entire file (or a portion of it) into a buffer.
+   * When options with position/length are provided, only that range is read.
    * @throws if the file does not exist
    */
-  readFile(filepath: string): Promise<Buffer>;
+  readFile(
+    filepath: string,
+    options?: { buffer?: Buffer; position?: number | null; length?: number; offset?: number },
+  ): Promise<Buffer>;
 
   /**
    * Write a buffer to a file, creating it if it doesn't exist.

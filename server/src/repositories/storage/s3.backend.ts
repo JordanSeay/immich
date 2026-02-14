@@ -98,19 +98,20 @@ export class S3StorageBackend implements StorageBackend {
     return '/' + path;
   }
 
-  // TODO: Use pipeline() from node:stream/promises for better error propagation.
-  // Currently if GetObjectCommand fails asynchronously, callers without an error
-  // handler may get unhandled errors.
   createReadStream(filepath: string): Readable {
     const passthrough = new PassThrough();
     const key = this.toKey(filepath);
 
-    // Start the async fetch and pipe to the passthrough stream
-    this.client
+    // Start the async fetch and pipe to the passthrough stream.
+    // Errors are forwarded to the passthrough so callers only need
+    // to handle 'error' on the returned stream.
+    const fetchPromise = this.client
       .send(new GetObjectCommand({ Bucket: this.bucket, Key: key }))
       .then((response) => {
         if (response.Body) {
-          (response.Body as Readable).pipe(passthrough);
+          const body = response.Body as Readable;
+          body.on('error', (err) => passthrough.destroy(err));
+          body.pipe(passthrough);
         } else {
           passthrough.destroy(new Error(`Empty response body for key: ${key}`));
         }
@@ -118,6 +119,9 @@ export class S3StorageBackend implements StorageBackend {
       .catch((error) => {
         passthrough.destroy(error);
       });
+
+    // Attach the promise so callers can optionally await the fetch start
+    (passthrough as any).fetchPromise = fetchPromise;
 
     return passthrough;
   }
@@ -149,9 +153,25 @@ export class S3StorageBackend implements StorageBackend {
     return passthrough;
   }
 
-  async readFile(filepath: string): Promise<Buffer> {
+  async readFile(
+    filepath: string,
+    options?: { buffer?: Buffer; position?: number | null; length?: number; offset?: number },
+  ): Promise<Buffer> {
     const key = this.toKey(filepath);
-    const response = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+
+    const getParams: ConstructorParameters<typeof GetObjectCommand>[0] = {
+      Bucket: this.bucket,
+      Key: key,
+    };
+
+    // Support partial reads via S3 Range header
+    if (options && options.position != null && options.length != null) {
+      const start = options.position;
+      const end = start + options.length - 1;
+      getParams.Range = `bytes=${start}-${end}`;
+    }
+
+    const response = await this.client.send(new GetObjectCommand(getParams));
 
     if (!response.Body) {
       throw new Error(`Empty response body for key: ${key}`);
@@ -164,31 +184,52 @@ export class S3StorageBackend implements StorageBackend {
     return Buffer.concat(chunks);
   }
 
-  // TODO: The check-then-write for overwrite:false is not atomic — two concurrent
-  // writes can both succeed. Consider using S3 conditional writes (If-None-Match: *)
-  // when targeting real AWS (available since Aug 2024, not supported on LocalStack).
+  // NOTE: For overwrite:false we use S3 conditional writes (If-None-Match: '*')
+  // to avoid a non-atomic check-then-write race. When running against LocalStack,
+  // If-None-Match may not be fully supported, so we fall back to check-then-write.
   // TODO: Set ContentType using mime type detection for proper serving via
   // presigned URLs or CloudFront.
   async writeFile(filepath: string, data: Buffer, options?: { overwrite?: boolean }): Promise<void> {
     const key = this.toKey(filepath);
+    const overwrite = options?.overwrite ?? true;
 
-    if (!options?.overwrite) {
-      // Check if file exists first (wx flag equivalent)
-      const exists = await this.checkFileExists(filepath);
-      if (exists) {
-        const error: NodeJS.ErrnoException = new Error(`File already exists: ${key}`);
-        error.code = 'EEXIST';
-        throw error;
-      }
+    const putParams: ConstructorParameters<typeof PutObjectCommand>[0] = {
+      Bucket: this.bucket,
+      Key: key,
+      Body: data,
+    };
+
+    if (!overwrite) {
+      // Try conditional write first (atomic on real AWS S3, may not work on LocalStack)
+      putParams.IfNoneMatch = '*';
     }
 
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: data,
-      }),
-    );
+    try {
+      await this.client.send(new PutObjectCommand(putParams));
+    } catch (error: any) {
+      if (!overwrite && error && (error.name === 'PreconditionFailed' || error.$metadata?.httpStatusCode === 412)) {
+        // Map S3 precondition failure to EEXIST for consistent error semantics
+        const eexist: NodeJS.ErrnoException = new Error(`File already exists: ${key}`);
+        eexist.code = 'EEXIST';
+        throw eexist;
+      }
+
+      // If IfNoneMatch is not supported (e.g. LocalStack), fall back to check-then-write
+      if (!overwrite && error?.name === 'NotImplemented') {
+        const exists = await this.checkFileExists(filepath);
+        if (exists) {
+          const eexist: NodeJS.ErrnoException = new Error(`File already exists: ${key}`);
+          eexist.code = 'EEXIST';
+          throw eexist;
+        }
+        // Retry without IfNoneMatch
+        delete putParams.IfNoneMatch;
+        await this.client.send(new PutObjectCommand(putParams));
+        return;
+      }
+
+      throw error;
+    }
   }
 
   async copyFile(source: string, target: string): Promise<void> {

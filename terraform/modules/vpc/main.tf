@@ -143,6 +143,8 @@ resource "aws_security_group" "alb" {
   vpc_id      = aws_vpc.main.id
   description = "ALB security group"
 
+  # TODO(production): Consider adding WAF rules, rate limiting, or IP restrictions.
+  # Open ingress is intentional for a public-facing web application.
   ingress {
     from_port   = 80
     to_port     = 80
@@ -211,6 +213,14 @@ resource "aws_security_group" "rds" {
     description     = "PostgreSQL from ECS"
   }
 
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound"
+  }
+
   tags = {
     Name        = "${var.app_name}-${var.environment}-rds-sg"
     Environment = var.environment
@@ -228,6 +238,14 @@ resource "aws_security_group" "redis" {
     protocol        = "tcp"
     security_groups = [aws_security_group.ecs.id]
     description     = "Redis from ECS"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound"
   }
 
   tags = {
