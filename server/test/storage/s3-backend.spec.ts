@@ -70,9 +70,9 @@ describe('S3StorageBackend', () => {
   afterAll(async () => {
     // Clean up test objects
     try {
-      const files = await backend.readdir(testPrefix);
+      const files = await backend.readdir('');
       for (const file of files) {
-        await backend.unlink(`${testPrefix}${file}`);
+        await backend.unlink(file);
       }
     } catch {
       // Best effort cleanup
