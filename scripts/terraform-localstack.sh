@@ -49,7 +49,7 @@ docker compose -f "$PROJECT_DIR/docker-compose.localstack.yml" up -d localstack
 
 log_info "Waiting for LocalStack to be healthy..."
 for i in $(seq 1 30); do
-  if docker exec immich-localstack awslocal s3 ls 2>/dev/null; then
+  if docker exec immich_localstack awslocal s3 ls 2>/dev/null; then
     log_info "LocalStack is ready!"
     break
   fi
