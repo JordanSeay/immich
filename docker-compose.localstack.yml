@@ -66,7 +66,9 @@ services:
 
   immich-server:
     container_name: immich_server
-    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    build:
+      context: .
+      dockerfile: server/Dockerfile.localstack
     volumes:
       - upload:/data
       - /etc/localtime:/etc/localtime:ro

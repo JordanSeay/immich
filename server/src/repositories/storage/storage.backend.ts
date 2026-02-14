@@ -1,3 +1,4 @@
+import { Stats } from 'node:fs';
 import { Readable, Writable } from 'node:stream';
 
 /**
@@ -70,9 +71,10 @@ export interface StorageBackend {
 
   /**
    * Get file metadata (size, timestamps, etc.).
+   * Returns a Stats-compatible object for interoperability with existing code.
    * @throws if the file does not exist
    */
-  stat(filepath: string): Promise<StorageFileStats>;
+  stat(filepath: string): Promise<Stats>;
 
   /**
    * Update file access and modification times.
@@ -113,15 +115,7 @@ export interface StorageBackend {
   checkDiskUsage(folder: string): Promise<DiskUsageStats>;
 }
 
-export interface StorageFileStats {
-  size: number;
-  atime: Date;
-  mtime: Date;
-  ctime: Date;
-  birthtime: Date;
-  isFile(): boolean;
-  isDirectory(): boolean;
-}
+export type StorageFileStats = Stats;
 
 export interface DiskUsageStats {
   available: number;

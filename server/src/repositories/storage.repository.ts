@@ -7,6 +7,7 @@ import { PassThrough, Readable, Writable } from 'node:stream';
 import { createGunzip, createGzip } from 'node:zlib';
 import { CrawlOptionsDto, WalkOptionsDto } from 'src/dtos/library.dto';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { LocalStorageBackend } from 'src/repositories/storage/local.backend';
 import { StorageBackend } from 'src/repositories/storage/storage.backend';
 import { StorageBackendFactory } from 'src/repositories/storage/storage.factory';
 import { mimeTypes } from 'src/utils/mime-types';
@@ -39,11 +40,52 @@ export interface DiskUsage {
 @Injectable()
 export class StorageRepository {
   private backend: StorageBackend;
+  private localBackend: LocalStorageBackend;
+  private mediaLocation: string | null = null;
 
   constructor(private logger: LoggingRepository) {
     this.logger.setContext(StorageRepository.name);
     this.backend = StorageBackendFactory.createFromEnv();
+    this.localBackend = new LocalStorageBackend();
+
+    // Pre-populate from env var if available
+    if (process.env.IMMICH_MEDIA_LOCATION) {
+      this.mediaLocation = process.env.IMMICH_MEDIA_LOCATION;
+    }
+
     this.logger.log(`Storage backend initialized: ${this.backend.type}`);
+  }
+
+  /**
+   * Set the resolved media location for path-based backend routing.
+   * Called by StorageService after detecting the actual media location.
+   * When the configured backend is S3, only paths under the media location
+   * are routed to S3; all other paths use the local filesystem.
+   */
+  setMediaLocation(location: string) {
+    this.mediaLocation = location;
+    if (this.backend.type !== 'local') {
+      this.logger.log(`Media location set for hybrid routing: ${location}`);
+    }
+  }
+
+  /**
+   * Get the appropriate backend for the given file path.
+   * Media paths (under the configured media location) go to the configured
+   * backend (e.g., S3). All other paths use the local filesystem.
+   */
+  private getBackend(filepath: string): StorageBackend {
+    if (this.backend.type === 'local') {
+      return this.backend;
+    }
+
+    const mediaLoc = this.mediaLocation;
+    if (mediaLoc && filepath.startsWith(mediaLoc)) {
+      return this.backend;
+    }
+
+    // Before media location is set, or for non-media paths, use local
+    return this.localBackend;
   }
 
   /** Get the active storage backend type */
@@ -52,43 +94,43 @@ export class StorageRepository {
   }
 
   realpath(filepath: string) {
-    return this.backend.realpath(filepath);
+    return this.getBackend(filepath).realpath(filepath);
   }
 
   readdir(folder: string): Promise<string[]> {
-    return this.backend.readdir(folder);
+    return this.getBackend(folder).readdir(folder);
   }
 
   copyFile(source: string, target: string) {
-    return this.backend.copyFile(source, target);
+    return this.getBackend(target).copyFile(source, target);
   }
 
   stat(filepath: string) {
-    return this.backend.stat(filepath);
+    return this.getBackend(filepath).stat(filepath);
   }
 
   createFile(filepath: string, buffer: Buffer) {
-    return this.backend.writeFile(filepath, buffer, { overwrite: false });
+    return this.getBackend(filepath).writeFile(filepath, buffer, { overwrite: false });
   }
 
   createWriteStream(filepath: string): Writable {
-    return this.backend.createWriteStream(filepath);
+    return this.getBackend(filepath).createWriteStream(filepath);
   }
 
   createOrOverwriteFile(filepath: string, buffer: Buffer) {
-    return this.backend.writeFile(filepath, buffer, { overwrite: true });
+    return this.getBackend(filepath).writeFile(filepath, buffer, { overwrite: true });
   }
 
   overwriteFile(filepath: string, buffer: Buffer) {
-    return this.backend.writeFile(filepath, buffer, { overwrite: true });
+    return this.getBackend(filepath).writeFile(filepath, buffer, { overwrite: true });
   }
 
   rename(source: string, target: string) {
-    return this.backend.rename(source, target);
+    return this.getBackend(source).rename(source, target);
   }
 
   utimes(filepath: string, atime: Date, mtime: Date) {
-    return this.backend.utimes(filepath, atime, mtime);
+    return this.getBackend(filepath).utimes(filepath, atime, mtime);
   }
 
   createZipStream(): ImmichZipStream {
@@ -112,13 +154,14 @@ export class StorageRepository {
   }
 
   createPlainReadStream(filepath: string): Readable {
-    return this.backend.createReadStream(filepath);
+    return this.getBackend(filepath).createReadStream(filepath);
   }
 
   async createReadStream(filepath: string, mimeType?: string | null): Promise<ImmichReadStream> {
-    const stats = await this.backend.stat(filepath);
+    const backend = this.getBackend(filepath);
+    const stats = await backend.stat(filepath);
     return {
-      stream: this.backend.createReadStream(filepath),
+      stream: backend.createReadStream(filepath),
       length: stats.size,
       type: mimeType || undefined,
     };
@@ -128,21 +171,21 @@ export class StorageRepository {
     filepath: string,
     options?: { buffer?: Buffer; position?: number | null; length?: number; offset?: number },
   ): Promise<Buffer> {
-    return this.backend.readFile(filepath, options);
+    return this.getBackend(filepath).readFile(filepath, options);
   }
 
   async readTextFile(filepath: string): Promise<string> {
-    const buffer = await this.backend.readFile(filepath);
+    const buffer = await this.getBackend(filepath).readFile(filepath);
     return buffer.toString('utf8');
   }
 
   async checkFileExists(filepath: string, mode = constants.F_OK): Promise<boolean> {
-    return this.backend.checkFileExists(filepath, mode);
+    return this.getBackend(filepath).checkFileExists(filepath, mode);
   }
 
   async unlink(file: string) {
     try {
-      await this.backend.unlink(file);
+      await this.getBackend(file).unlink(file);
     } catch (error) {
       if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
         this.logger.warn(`File ${file} does not exist.`);
@@ -153,23 +196,47 @@ export class StorageRepository {
   }
 
   async unlinkDir(folder: string, options: { recursive?: boolean; force?: boolean }) {
-    return this.backend.unlinkDir(folder, options);
+    return this.getBackend(folder).unlinkDir(folder, options);
   }
 
   async removeEmptyDirs(directory: string, self: boolean = false) {
-    return this.backend.removeEmptyDirs(directory, self);
+    return this.getBackend(directory).removeEmptyDirs(directory, self);
   }
 
   mkdirSync(filepath: string): void {
-    this.backend.mkdirSync(filepath);
+    // Always create directories on the local filesystem, even when the
+    // configured backend is S3.  Multer (file upload middleware) writes
+    // directly to the local filesystem and requires the directory to exist.
+    this.localBackend.mkdirSync(filepath);
+  }
+
+  /**
+   * Sync a file from the local filesystem to the configured backend.
+   * This is used after multer writes a file locally (e.g., during upload)
+   * to copy the file to the remote backend (e.g., S3) and clean up the
+   * local copy.  No-op when the backend is local.
+   */
+  async syncLocalFileToBackend(filepath: string): Promise<void> {
+    if (this.backend.type === 'local') {
+      return;
+    }
+
+    const mediaLoc = this.mediaLocation;
+    if (!mediaLoc || !filepath.startsWith(mediaLoc)) {
+      return;
+    }
+
+    const data = await this.localBackend.readFile(filepath);
+    await this.backend.writeFile(filepath, data, { overwrite: true });
+    await this.localBackend.unlink(filepath);
   }
 
   existsSync(filepath: string) {
-    return this.backend.existsSync(filepath);
+    return this.getBackend(filepath).existsSync(filepath);
   }
 
   async checkDiskUsage(folder: string): Promise<DiskUsage> {
-    return this.backend.checkDiskUsage(folder);
+    return this.getBackend(folder).checkDiskUsage(folder);
   }
 
   crawl(crawlOptions: CrawlOptionsDto): Promise<string[]> {

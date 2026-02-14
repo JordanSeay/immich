@@ -383,6 +383,12 @@ export class AssetMediaService extends BaseService {
       ? this.assetRepository.upsertFile({ assetId, type: AssetFileType.Sidecar, path: sidecarPath })
       : this.assetRepository.deleteFile({ assetId, type: AssetFileType.Sidecar }));
 
+    // Sync uploaded files from local disk to remote backend (e.g., S3)
+    await this.storageRepository.syncLocalFileToBackend(file.originalPath);
+    if (sidecarPath) {
+      await this.storageRepository.syncLocalFileToBackend(sidecarPath);
+    }
+
     await this.storageRepository.utimes(file.originalPath, new Date(), new Date(dto.fileModifiedAt));
     await this.assetRepository.upsertExif(
       { assetId, fileSizeInByte: file.size },
@@ -452,6 +458,7 @@ export class AssetMediaService extends BaseService {
     }
 
     if (sidecarFile) {
+      await this.storageRepository.syncLocalFileToBackend(sidecarFile.originalPath);
       await this.assetRepository.upsertFile({
         assetId: asset.id,
         path: sidecarFile.originalPath,
@@ -459,6 +466,7 @@ export class AssetMediaService extends BaseService {
       });
       await this.storageRepository.utimes(sidecarFile.originalPath, new Date(), new Date(dto.fileModifiedAt));
     }
+    await this.storageRepository.syncLocalFileToBackend(file.originalPath);
     await this.storageRepository.utimes(file.originalPath, new Date(), new Date(dto.fileModifiedAt));
     await this.assetRepository.upsertExif(
       { assetId: asset.id, fileSizeInByte: file.size },

@@ -12,8 +12,9 @@ import {
   S3ClientConfig,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
+import { Stats } from 'node:fs';
 import { PassThrough, Readable, Writable } from 'node:stream';
-import { DiskUsageStats, StorageBackend, StorageFileStats } from 'src/repositories/storage/storage.backend';
+import { DiskUsageStats, StorageBackend } from 'src/repositories/storage/storage.backend';
 
 export interface S3BackendConfig {
   bucket: string;
@@ -315,22 +316,43 @@ export class S3StorageBackend implements StorageBackend {
     }
   }
 
-  async stat(filepath: string): Promise<StorageFileStats> {
+  async stat(filepath: string): Promise<Stats> {
     const key = this.toKey(filepath);
     const response = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
 
     const lastModified = response.LastModified || new Date();
     const size = response.ContentLength || 0;
+    const atimeMs = lastModified.getTime();
 
+    // Build a Stats-compatible object for S3 objects.
+    // S3 objects are always files, never directories/devices/etc.
     return {
+      dev: 0,
+      ino: 0,
+      mode: 0o100644,
+      nlink: 1,
+      uid: 0,
+      gid: 0,
+      rdev: 0,
       size,
+      blksize: 4096,
+      blocks: Math.ceil(size / 512),
+      atimeMs,
+      mtimeMs: atimeMs,
+      ctimeMs: atimeMs,
+      birthtimeMs: atimeMs,
       atime: lastModified,
       mtime: lastModified,
       ctime: lastModified,
       birthtime: lastModified,
       isFile: () => true,
       isDirectory: () => false,
-    };
+      isBlockDevice: () => false,
+      isCharacterDevice: () => false,
+      isSymbolicLink: () => false,
+      isFIFO: () => false,
+      isSocket: () => false,
+    } as Stats;
   }
 
   async utimes(_filepath: string, _atime: Date, _mtime: Date): Promise<void> {
