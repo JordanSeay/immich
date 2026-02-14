@@ -30,7 +30,7 @@ export class LocalStorageBackend implements StorageBackend {
   }
 
   async writeFile(filepath: string, data: Buffer, options?: { overwrite?: boolean }): Promise<void> {
-    const flag = options?.overwrite ? 'w' : 'wx';
+    const flag = options?.overwrite === false ? 'wx' : 'w';
     await fs.writeFile(filepath, data, { flag });
   }
 

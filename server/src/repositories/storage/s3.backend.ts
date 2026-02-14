@@ -48,7 +48,14 @@ export class S3StorageBackend implements StorageBackend {
 
   constructor(config: S3BackendConfig) {
     this.bucket = config.bucket;
-    this.prefix = config.prefix || '';
+    
+    // Normalize prefix to avoid key collisions:
+    // - Remove leading slashes
+    // - Empty string remains empty
+    // - Non-empty strings get trailing slash if missing
+    const rawPrefix = config.prefix ?? '';
+    const trimmedLeading = rawPrefix.replace(/^\/+/, '');
+    this.prefix = trimmedLeading === '' ? '' : (trimmedLeading.endsWith('/') ? trimmedLeading : trimmedLeading + '/');
 
     const clientConfig: S3ClientConfig = {
       region: config.region,
