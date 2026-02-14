@@ -90,16 +90,20 @@ ERRORS=0
 
 # S3 Bucket
 log_info "Checking S3 bucket..."
-if aws --endpoint-url="$ENDPOINT" s3 ls s3://immich-media 2>/dev/null; then
-  log_info "✓ S3 bucket 'immich-media' exists"
+S3_BUCKET_NAME=$(terraform output -raw s3_bucket_name 2>/dev/null || echo "")
+if [ -z "$S3_BUCKET_NAME" ]; then
+  log_error "✗ Failed to determine S3 bucket name from Terraform output 's3_bucket_name'"
+  ERRORS=$((ERRORS + 1))
+elif aws --endpoint-url="$ENDPOINT" s3 ls "s3://$S3_BUCKET_NAME" 2>/dev/null; then
+  log_info "✓ S3 bucket '$S3_BUCKET_NAME' exists"
 else
-  log_error "✗ S3 bucket not found"
+  log_error "✗ S3 bucket '$S3_BUCKET_NAME' not found"
   ERRORS=$((ERRORS + 1))
 fi
 
 # IAM Roles
 log_info "Checking IAM roles..."
-for role in immich-local-ecs-execution-role immich-local-ecs-task-role; do
+for role in immich-local-ecs-execution immich-local-ecs-task; do
   if aws --endpoint-url="$ENDPOINT" iam get-role --role-name "$role" 2>/dev/null | grep -q RoleName; then
     log_info "✓ IAM role '$role' exists"
   else

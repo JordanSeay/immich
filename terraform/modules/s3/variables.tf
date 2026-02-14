@@ -7,8 +7,9 @@ variable "environment" {
 }
 
 variable "s3_bucket_name" {
-  type    = string
-  default = "media"
+  description = "Final S3 bucket name (not prefixed)"
+  type        = string
+  default     = "media"
 }
 
 variable "enable_versioning" {

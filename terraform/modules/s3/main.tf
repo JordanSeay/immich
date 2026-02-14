@@ -7,7 +7,7 @@
 # TODO: Add S3 object tagging for cost allocation and audit trails
 
 resource "aws_s3_bucket" "media" {
-  bucket = "${var.app_name}-${var.environment}-${var.s3_bucket_name}"
+  bucket = var.s3_bucket_name
 
   tags = {
     Name        = "${var.app_name}-${var.environment}-media"
