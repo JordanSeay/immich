@@ -102,14 +102,23 @@ DB_DATA_LOCATION=./postgres
 DB_PASSWORD=postgres
 DB_USERNAME=postgres
 DB_DATABASE_NAME=immich
+IMMICH_STORAGE_BACKEND=s3
+IMMICH_S3_BUCKET=immich-media
+IMMICH_S3_REGION=us-east-1
 EOF
 
-if docker compose -f "$PROJECT_ROOT/docker/docker-compose.s3.yml" --env-file "$TEMP_ENV" config > /dev/null 2>&1; then
+# Copy compose file to temp location and validate (simulates user copying to root)
+TEMP_COMPOSE=$(mktemp)
+cp "$PROJECT_ROOT/docker/docker-compose.s3.yml" "$TEMP_COMPOSE"
+TEMP_DIR=$(dirname "$TEMP_COMPOSE")
+cp "$TEMP_ENV" "$TEMP_DIR/.env"
+
+if docker compose -f "$TEMP_COMPOSE" config > /dev/null 2>&1; then
   echo "  ✓ docker-compose.s3.yml is valid"
-  rm -f "$TEMP_ENV"
+  rm -f "$TEMP_ENV" "$TEMP_COMPOSE" "$TEMP_DIR/.env"
 else
   echo "  ✗ docker-compose.s3.yml has syntax errors"
-  rm -f "$TEMP_ENV"
+  rm -f "$TEMP_ENV" "$TEMP_COMPOSE" "$TEMP_DIR/.env"
   echo ""
   echo "❌ Test 4 FAILED: Invalid docker-compose file"
   exit 1
