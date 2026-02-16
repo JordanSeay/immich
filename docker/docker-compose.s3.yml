@@ -1,15 +1,22 @@
 #
+# WARNING: To install Immich, follow our guide: https://docs.immich.app/install/docker-compose
+#
+# Make sure to use the docker-compose.yml of the current release:
+#
+# https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+#
+# The compose file on main may not be compatible with the latest release.
+
 # Example Docker Compose configuration for Immich with AWS S3 storage backend
 #
 # This file demonstrates how to configure Immich to use Amazon S3 for media storage.
 # For detailed setup instructions, see: https://docs.immich.app/install/s3-storage
 #
 # Quick Start:
-#   1. Copy this file: cp docker/docker-compose.s3.yml docker-compose.yml
-#   2. Copy and configure: cp docker/example.env .env
+#   1. Copy this file to project root: cp docker/docker-compose.s3.yml docker-compose.yml
+#   2. Copy and configure environment: cp docker/example.env .env
 #   3. Edit .env to add your S3 configuration
 #   4. Start: docker compose up -d
-#
 
 name: immich
 
