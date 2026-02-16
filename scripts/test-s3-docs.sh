@@ -23,6 +23,7 @@ DOCS=(
   "docker/example.env"
   "docker/README.md"
   "docker/docker-compose.s3.yml"
+  "docker-compose.localstack.yml"
   "scripts/init-localstack.sh"
 )
 

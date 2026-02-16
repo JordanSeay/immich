@@ -11,6 +11,28 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Helper function to update .env file - handles special characters safely
+update_env() {
+  local key="$1"
+  local value="$2"
+  local file="$PROJECT_ROOT/.env"
+  
+  # Escape special characters for sed
+  local escaped_value=$(printf '%s\n' "$value" | sed 's/[[\.*^$/]/\\&/g')
+  
+  # Use | as delimiter to avoid issues with / in values
+  if grep -q "^# ${key}=" "$file"; then
+    # Uncomment and update
+    sed -i.bak "s|^# ${key}=.*|${key}=${escaped_value}|" "$file"
+  elif grep -q "^${key}=" "$file"; then
+    # Update existing
+    sed -i.bak "s|^${key}=.*|${key}=${escaped_value}|" "$file"
+  else
+    # Add new
+    echo "${key}=${value}" >> "$file"
+  fi
+}
+
 echo "=========================================="
 echo " Immich S3 Quick Start"
 echo "=========================================="
@@ -69,14 +91,14 @@ case $choice in
       echo
     fi
     
-    # Update .env file
-    sed -i.bak "s/# IMMICH_STORAGE_BACKEND=s3/IMMICH_STORAGE_BACKEND=s3/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_BUCKET=immich-media/IMMICH_S3_BUCKET=$S3_BUCKET/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_REGION=us-east-1/IMMICH_S3_REGION=$S3_REGION/" "$PROJECT_ROOT/.env"
+    # Update .env file using helper function
+    update_env "IMMICH_STORAGE_BACKEND" "s3"
+    update_env "IMMICH_S3_BUCKET" "$S3_BUCKET"
+    update_env "IMMICH_S3_REGION" "$S3_REGION"
     
     if [ -n "$S3_ACCESS_KEY" ]; then
-      sed -i.bak "s/# IMMICH_S3_ACCESS_KEY=your-access-key-id/IMMICH_S3_ACCESS_KEY=$S3_ACCESS_KEY/" "$PROJECT_ROOT/.env"
-      sed -i.bak "s/# IMMICH_S3_SECRET_KEY=your-secret-access-key/IMMICH_S3_SECRET_KEY=$S3_SECRET_KEY/" "$PROJECT_ROOT/.env"
+      update_env "IMMICH_S3_ACCESS_KEY" "$S3_ACCESS_KEY"
+      update_env "IMMICH_S3_SECRET_KEY" "$S3_SECRET_KEY"
     fi
     
     rm -f "$PROJECT_ROOT/.env.bak"
@@ -92,14 +114,14 @@ case $choice in
     read -sp "Enter MinIO secret key: " S3_SECRET_KEY
     echo
     
-    # Update .env file
-    sed -i.bak "s/# IMMICH_STORAGE_BACKEND=s3/IMMICH_STORAGE_BACKEND=s3/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_BUCKET=immich-media/IMMICH_S3_BUCKET=$S3_BUCKET/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_REGION=us-east-1/IMMICH_S3_REGION=us-east-1/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s|# IMMICH_S3_ENDPOINT=https://s3.us-east-1.wasabisys.com|IMMICH_S3_ENDPOINT=$S3_ENDPOINT|" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_ACCESS_KEY=your-access-key-id/IMMICH_S3_ACCESS_KEY=$S3_ACCESS_KEY/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_SECRET_KEY=your-secret-access-key/IMMICH_S3_SECRET_KEY=$S3_SECRET_KEY/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_FORCE_PATH_STYLE=true/IMMICH_S3_FORCE_PATH_STYLE=true/" "$PROJECT_ROOT/.env"
+    # Update .env file using helper function
+    update_env "IMMICH_STORAGE_BACKEND" "s3"
+    update_env "IMMICH_S3_BUCKET" "$S3_BUCKET"
+    update_env "IMMICH_S3_REGION" "us-east-1"
+    update_env "IMMICH_S3_ENDPOINT" "$S3_ENDPOINT"
+    update_env "IMMICH_S3_ACCESS_KEY" "$S3_ACCESS_KEY"
+    update_env "IMMICH_S3_SECRET_KEY" "$S3_SECRET_KEY"
+    update_env "IMMICH_S3_FORCE_PATH_STYLE" "true"
     
     rm -f "$PROJECT_ROOT/.env.bak"
     echo "✓ MinIO configuration added to .env"
@@ -115,13 +137,13 @@ case $choice in
     read -sp "Enter secret key: " S3_SECRET_KEY
     echo
     
-    # Update .env file
-    sed -i.bak "s/# IMMICH_STORAGE_BACKEND=s3/IMMICH_STORAGE_BACKEND=s3/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_BUCKET=immich-media/IMMICH_S3_BUCKET=$S3_BUCKET/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_REGION=us-east-1/IMMICH_S3_REGION=$S3_REGION/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s|# IMMICH_S3_ENDPOINT=https://s3.us-east-1.wasabisys.com|IMMICH_S3_ENDPOINT=$S3_ENDPOINT|" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_ACCESS_KEY=your-access-key-id/IMMICH_S3_ACCESS_KEY=$S3_ACCESS_KEY/" "$PROJECT_ROOT/.env"
-    sed -i.bak "s/# IMMICH_S3_SECRET_KEY=your-secret-access-key/IMMICH_S3_SECRET_KEY=$S3_SECRET_KEY/" "$PROJECT_ROOT/.env"
+    # Update .env file using helper function
+    update_env "IMMICH_STORAGE_BACKEND" "s3"
+    update_env "IMMICH_S3_BUCKET" "$S3_BUCKET"
+    update_env "IMMICH_S3_REGION" "$S3_REGION"
+    update_env "IMMICH_S3_ENDPOINT" "$S3_ENDPOINT"
+    update_env "IMMICH_S3_ACCESS_KEY" "$S3_ACCESS_KEY"
+    update_env "IMMICH_S3_SECRET_KEY" "$S3_SECRET_KEY"
     
     rm -f "$PROJECT_ROOT/.env.bak"
     echo "✓ S3-compatible service configuration added to .env"
