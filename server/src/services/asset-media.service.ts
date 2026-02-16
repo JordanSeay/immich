@@ -207,6 +207,9 @@ export class AssetMediaService extends BaseService {
 
     const path = editedPath ?? originalPath!;
 
+    // Ensure file is available locally for serving
+    await this.storageRepository.ensureLocalFile(path);
+
     return new ImmichFileResponse({
       path,
       fileName: getFileNameWithoutExtension(originalFileName) + getFilenameExtension(path),
@@ -254,6 +257,9 @@ export class AssetMediaService extends BaseService {
 
     const fileName = `${getFileNameWithoutExtension(originalFileName)}_${size}${getFilenameExtension(path)}`;
 
+    // Ensure thumbnail is available locally for serving
+    await this.storageRepository.ensureLocalFile(path);
+
     return new ImmichFileResponse({
       fileName,
       path,
@@ -272,6 +278,9 @@ export class AssetMediaService extends BaseService {
     }
 
     const filepath = asset.encodedVideoPath || asset.originalPath;
+
+    // Ensure video is available locally for serving
+    await this.storageRepository.ensureLocalFile(filepath);
 
     return new ImmichFileResponse({
       path: filepath,

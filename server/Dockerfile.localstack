@@ -34,7 +34,7 @@ RUN --mount=type=cache,id=pnpm-web,target=/buildcache/pnpm-store \
     --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
     --mount=type=bind,source=pnpm-workspace.yaml,target=pnpm-workspace.yaml \
     SHARP_IGNORE_GLOBAL_LIBVIPS=true pnpm --filter @immich/sdk --filter immich-web --frozen-lockfile --force install && \
-    pnpm --filter @immich/sdk --filter immich-web build
+    NODE_OPTIONS="--max-old-space-size=8192" pnpm --filter @immich/sdk --filter immich-web build
 
 FROM ghcr.io/immich-app/base-server-prod:202601131104@sha256:c649c5838b6348836d27db6d49cadbbc6157feae7a1a237180c3dec03577ba8f
 
@@ -48,7 +48,7 @@ COPY --from=web /usr/src/app/web/build /build/www
 # Stub core plugin - manifest must pass validation (PluginManifestDto)
 RUN mkdir -p /build/corePlugin/dist && \
     echo '{"name":"immich-core","version":"0.0.1","title":"Immich Core (stub)","description":"Stub core plugin for LocalStack testing","author":"Immich","wasm":{"path":"dist/plugin.wasm"}}' > /build/corePlugin/manifest.json && \
-    printf '\x00asm\x01\x00\x00\x00' > /build/corePlugin/dist/plugin.wasm
+    /bin/sh -c 'printf "\000asm\001\000\000\000" > /build/corePlugin/dist/plugin.wasm'
 COPY LICENSE /licenses/LICENSE.txt
 COPY LICENSE /LICENSE
 
@@ -57,6 +57,6 @@ ENV PATH="${PATH}:/usr/src/app/server/bin"
 VOLUME /data
 EXPOSE 2283
 ENTRYPOINT ["tini", "--", "/bin/bash", "-c"]
-CMD ["start.sh"]
+CMD ["for d in encoded-video library upload profile thumbs backups; do mkdir -p /data/$d && echo immich > /data/$d/.immich; done && start.sh"]
 
 HEALTHCHECK CMD immich-healthcheck

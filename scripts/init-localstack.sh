@@ -61,6 +61,14 @@ aws --endpoint-url=$ENDPOINT s3api put-bucket-versioning \
   --versioning-configuration Status=Enabled
 echo "  ✓ Versioning enabled"
 
+# Create .immich mount check files in S3
+echo ""
+echo "[3.5/6] Creating .immich mount check files in S3..."
+for folder in encoded-video library upload profile thumbs backups; do
+  echo "immich" | aws --endpoint-url=$ENDPOINT s3 cp - "s3://$BUCKET/$folder/.immich" 2>/dev/null
+done
+echo "  ✓ Mount check files created"
+
 # Block public access
 echo ""
 echo "[4/6] Blocking public access..."

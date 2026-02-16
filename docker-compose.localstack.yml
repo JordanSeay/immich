@@ -26,6 +26,7 @@ services:
     volumes:
       - localstack-data:/var/lib/localstack
       - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 10s
@@ -79,13 +80,14 @@ services:
       DB_DATABASE_NAME: immich
       REDIS_HOSTNAME: redis
       # S3 storage backend config (pointing to LocalStack)
-      IMMICH_STORAGE_BACKEND: ${IMMICH_STORAGE_BACKEND:-local}
+      IMMICH_STORAGE_BACKEND: ${IMMICH_STORAGE_BACKEND:-s3}
       IMMICH_S3_BUCKET: ${IMMICH_S3_BUCKET:-immich-media}
       IMMICH_S3_REGION: ${IMMICH_S3_REGION:-us-east-1}
       IMMICH_S3_ENDPOINT: http://localstack:4566
       IMMICH_S3_FORCE_PATH_STYLE: "true"
       IMMICH_S3_ACCESS_KEY: test
       IMMICH_S3_SECRET_KEY: test
+      IMMICH_IGNORE_MOUNT_CHECK_ERRORS: "true"
     ports:
       - "2283:2283"
     depends_on:
@@ -93,15 +95,39 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      localstack:
-        condition: service_healthy
+      localstack-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       disable: false
 
+  localstack-init:
+    container_name: immich_localstack_init
+    image: amazon/aws-cli:latest
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        until aws --endpoint-url=http://localstack:4566 s3 ls 2>/dev/null; do echo 'Waiting for LocalStack...'; sleep 2; done
+        aws --endpoint-url=http://localstack:4566 s3api head-bucket --bucket immich-media 2>/dev/null || \
+          aws --endpoint-url=http://localstack:4566 s3api create-bucket --bucket immich-media --region us-east-1
+        for d in encoded-video library upload profile thumbs backups; do
+          echo immich | aws --endpoint-url=http://localstack:4566 s3 cp - s3://immich-media/$$d/.immich
+        done
+        echo 'S3 bucket and mount check files ready'
+    depends_on:
+      localstack:
+        condition: service_healthy
+
   immich-machine-learning:
     container_name: immich_machine_learning
-    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
+    build:
+      context: ./machine-learning
+      dockerfile: Dockerfile
     volumes:
       - model-cache:/cache
     environment:

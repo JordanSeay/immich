@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import archiver from 'archiver';
 import chokidar, { ChokidarOptions } from 'chokidar';
 import { escapePath, glob, globStream } from 'fast-glob';
-import { constants } from 'node:fs';
+import { constants, existsSync, mkdirSync as fsMkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
 import { createGunzip, createGzip } from 'node:zlib';
 import { CrawlOptionsDto, WalkOptionsDto } from 'src/dtos/library.dto';
@@ -229,6 +230,68 @@ export class StorageRepository {
     const data = await this.localBackend.readFile(filepath);
     await this.backend.writeFile(filepath, data, { overwrite: true });
     await this.localBackend.unlink(filepath);
+  }
+
+  /**
+   * Ensure a file from the remote backend is available on the local filesystem.
+   * Used before media processing tools (sharp, ffmpeg, exiftool) that require
+   * direct filesystem access.  If the file is already present locally it is
+   * treated as a cache hit and no download occurs.
+   *
+   * No-op when the backend is local.
+   */
+  async ensureLocalFile(filepath: string): Promise<void> {
+    if (this.backend.type === 'local') {
+      return;
+    }
+
+    const mediaLoc = this.mediaLocation;
+    if (!mediaLoc || !filepath.startsWith(mediaLoc)) {
+      // Non-media path – already local
+      return;
+    }
+
+    // Check if local copy already exists (cache hit)
+    if (existsSync(filepath)) {
+      return;
+    }
+
+    this.logger.debug(`Downloading file from backend for local processing: ${filepath}`);
+    const dir = dirname(filepath);
+    fsMkdirSync(dir, { recursive: true });
+
+    const data = await this.backend.readFile(filepath);
+    await this.localBackend.writeFile(filepath, data, { overwrite: true });
+  }
+
+  /**
+   * Upload locally-generated files (thumbnails, encoded video) to the remote
+   * backend.  The local copies are kept as a cache so that subsequent reads
+   * (e.g., serving thumbnails) don't need another download.
+   *
+   * No-op when the backend is local.
+   */
+  async syncGeneratedFiles(filepaths: string[]): Promise<void> {
+    if (this.backend.type === 'local') {
+      return;
+    }
+
+    for (const filepath of filepaths) {
+      const mediaLoc = this.mediaLocation;
+      if (!mediaLoc || !filepath.startsWith(mediaLoc)) {
+        continue;
+      }
+
+      if (!existsSync(filepath)) {
+        this.logger.warn(`Generated file not found locally, skipping sync: ${filepath}`);
+        continue;
+      }
+
+      this.logger.debug(`Syncing generated file to backend: ${filepath}`);
+      const data = await this.localBackend.readFile(filepath);
+      await this.backend.writeFile(filepath, data, { overwrite: true });
+      // Keep local copy as cache – do NOT delete
+    }
   }
 
   existsSync(filepath: string) {

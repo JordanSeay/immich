@@ -183,8 +183,14 @@ export class MediaService extends BaseService {
       generated?.files ?? [],
     );
 
+    // Sync generated edited thumbnails to remote backend
+    if (generated?.files.length) {
+      await this.storageRepository.syncGeneratedFiles(generated.files.map((f) => f.path));
+    }
+
     let thumbhash: Buffer | undefined = generated?.thumbhash;
     if (!thumbhash) {
+      await this.storageRepository.ensureLocalFile(asset.originalPath);
       const extractedImage = await this.extractOriginalImage(asset, config.image);
       const { info, data, colorspace } = extractedImage;
 
@@ -224,9 +230,11 @@ export class MediaService extends BaseService {
     let generated: Awaited<ReturnType<MediaService['generateImageThumbnails']>>;
     if (asset.type === AssetType.Video || asset.originalFileName.toLowerCase().endsWith('.gif')) {
       this.logger.verbose(`Thumbnail generation for video ${id} ${asset.originalPath}`);
+      await this.storageRepository.ensureLocalFile(asset.originalPath);
       generated = await this.generateVideoThumbnails(asset, config);
     } else if (asset.type === AssetType.Image) {
       this.logger.verbose(`Thumbnail generation for image ${id} ${asset.originalPath}`);
+      await this.storageRepository.ensureLocalFile(asset.originalPath);
       generated = await this.generateImageThumbnails(asset, config);
     } else {
       this.logger.warn(`Skipping thumbnail generation for asset ${id}: ${asset.type} is not an image or video`);
@@ -239,6 +247,14 @@ export class MediaService extends BaseService {
     }
 
     await this.syncFiles(asset.files, generated.files);
+
+    // Sync generated thumbnail files to remote backend (e.g., S3)
+    const generatedPaths = generated.files.map((f) => f.path);
+    if (editedGenerated) {
+      generatedPaths.push(...editedGenerated.files.map((f) => f.path));
+    }
+    await this.storageRepository.syncGeneratedFiles(generatedPaths);
+
     const thumbhash = editedGenerated?.thumbhash || generated.thumbhash;
 
     if (!asset.thumbhash || Buffer.compare(asset.thumbhash, thumbhash) !== 0) {
@@ -403,11 +419,14 @@ export class MediaService extends BaseService {
         this.logger.error(`Could not generate person thumbnail for video ${id}: missing preview path`);
         return JobStatus.Failed;
       }
+      await this.storageRepository.ensureLocalFile(previewPath);
       inputImage = previewPath;
     } else if (image.extractEmbedded && mimeTypes.isRaw(originalPath)) {
+      await this.storageRepository.ensureLocalFile(originalPath);
       const extracted = await this.extractImage(originalPath, image.preview.size);
       inputImage = extracted ? extracted.buffer : originalPath;
     } else {
+      await this.storageRepository.ensureLocalFile(originalPath);
       inputImage = originalPath;
     }
 
@@ -441,6 +460,7 @@ export class MediaService extends BaseService {
     };
 
     await this.mediaRepository.generateThumbnail(decodedImage, thumbnailOptions, thumbnailPath);
+    await this.storageRepository.syncGeneratedFiles([thumbnailPath]);
     await this.personRepository.update({ id, thumbnailPath });
 
     return JobStatus.Success;
@@ -564,6 +584,9 @@ export class MediaService extends BaseService {
     const output = StorageCore.getEncodedVideoPath(asset);
     this.storageCore.ensureFolders(output);
 
+    // Ensure original video is available locally for ffmpeg
+    await this.storageRepository.ensureLocalFile(input);
+
     const { videoStreams, audioStreams, format } = await this.mediaRepository.probe(input, {
       countFrames: this.logger.isLevelEnabled(LogLevel.Debug), // makes frame count more reliable for progress logs
     });
@@ -631,6 +654,9 @@ export class MediaService extends BaseService {
     }
 
     this.logger.log(`Successfully encoded ${asset.id}`);
+
+    // Sync encoded video to remote backend
+    await this.storageRepository.syncGeneratedFiles([output]);
 
     await this.assetRepository.update({ id: asset.id, encodedVideoPath: output });
 

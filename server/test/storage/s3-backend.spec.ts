@@ -129,7 +129,7 @@ describe('S3StorageBackend', () => {
 
       expect(result.length).toBe(data.length);
       expect(result[0]).toBe(0xab);
-      expect(result[result.length - 1]).toBe(0xab);
+      expect(result.at(-1)).toBe(0xab);
     });
   });
 
@@ -280,7 +280,7 @@ describe('S3StorageBackend', () => {
 
       const files = await backend.readdir(dir);
       expect(files).toHaveLength(3);
-      expect(files.sort()).toEqual(['file-a.txt', 'file-b.txt', 'file-c.txt']);
+      expect(files.toSorted()).toEqual(['file-a.txt', 'file-b.txt', 'file-c.txt']);
     });
 
     it('should return empty array for non-existent prefix', async () => {

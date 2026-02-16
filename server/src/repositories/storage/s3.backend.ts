@@ -326,10 +326,11 @@ export class S3StorageBackend implements StorageBackend {
 
     // Build a Stats-compatible object for S3 objects.
     // S3 objects are always files, never directories/devices/etc.
+    // 33188 decimal = 0o100644 octal = regular file with rw-r--r-- permissions
     return {
       dev: 0,
       ino: 0,
-      mode: 0o100644,
+      mode: 33_188,
       nlink: 1,
       uid: 0,
       gid: 0,
@@ -425,17 +426,17 @@ export class S3StorageBackend implements StorageBackend {
     return files;
   }
 
-  async realpath(filepath: string): Promise<string> {
+  realpath(filepath: string): Promise<string> {
     // S3 doesn't have symlinks — return the path as-is
-    return filepath;
+    return Promise.resolve(filepath);
   }
 
-  async checkDiskUsage(_folder: string): Promise<DiskUsageStats> {
+  checkDiskUsage(_folder: string): Promise<DiskUsageStats> {
     // S3 has effectively unlimited storage
-    return {
+    return Promise.resolve({
       available: Number.MAX_SAFE_INTEGER,
       free: Number.MAX_SAFE_INTEGER,
       total: Number.MAX_SAFE_INTEGER,
-    };
+    });
   }
 }
