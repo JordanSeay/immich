@@ -68,12 +68,9 @@ describe('S3StorageBackend', () => {
   });
 
   afterAll(async () => {
-    // Clean up test objects
+    // Clean up all test objects using unlinkDir for thorough cleanup
     try {
-      const files = await backend.readdir(testPrefix);
-      for (const file of files) {
-        await backend.unlink(`${testPrefix}${file}`);
-      }
+      await backend.unlinkDir(testPrefix, { recursive: true, force: true });
     } catch {
       // Best effort cleanup
     }
@@ -101,6 +98,26 @@ describe('S3StorageBackend', () => {
 
       const result = await backend.readFile(filepath);
       expect(result.toString()).toBe('version2');
+    });
+
+    it('should reject write when file exists and overwrite=false', async () => {
+      const filepath = 'upload/test-user/no-overwrite-test.txt';
+      await backend.writeFile(filepath, Buffer.from('original'));
+
+      // Attempt to write with overwrite=false should throw EEXIST
+      await expect(backend.writeFile(filepath, Buffer.from('new'), { overwrite: false })).rejects.toThrow();
+      
+      // Original content should be preserved
+      const result = await backend.readFile(filepath);
+      expect(result.toString()).toBe('original');
+    });
+
+    it('should allow write when file does not exist and overwrite=false', async () => {
+      const filepath = 'upload/test-user/new-no-overwrite-test.txt';
+      await backend.writeFile(filepath, Buffer.from('new file'), { overwrite: false });
+
+      const result = await backend.readFile(filepath);
+      expect(result.toString()).toBe('new file');
     });
 
     it('should handle binary data', async () => {
