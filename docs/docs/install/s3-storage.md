@@ -109,118 +109,67 @@ That's it! Immich will now store your media files in S3.
 
 ## Use Cases
 
-### AWS S3 with IAM Roles (Recommended for AWS deployments)
+### AWS S3 with IAM Roles
 
-If you're running Immich on AWS infrastructure (EC2, ECS, EKS), use IAM roles instead of access keys for better security.
+For AWS deployments (EC2, ECS, EKS), use IAM roles instead of access keys.
 
-**IAM Policy for Immich:**
+**Required IAM Policy:**
 ```json
 {
   "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:ListBucket",
-        "s3:GetBucketLocation"
-      ],
-      "Resource": [
-        "arn:aws:s3:::immich-media",
-        "arn:aws:s3:::immich-media/*"
-      ]
-    }
-  ]
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "s3:GetBucketLocation"],
+    "Resource": ["arn:aws:s3:::immich-media", "arn:aws:s3:::immich-media/*"]
+  }]
 }
 ```
 
-**Environment variables** (no credentials needed):
+**Configuration** (no credentials needed):
 ```bash
 IMMICH_STORAGE_BACKEND=s3
 IMMICH_S3_BUCKET=immich-media
 IMMICH_S3_REGION=us-east-1
-# No IMMICH_S3_ACCESS_KEY or IMMICH_S3_SECRET_KEY needed
 ```
 
-### MinIO (Self-hosted S3)
+### S3-Compatible Services
 
-MinIO is an open-source S3-compatible object storage server you can self-host.
+Immich works with MinIO, Wasabi, Backblaze B2, and other S3-compatible services.
 
-**docker-compose.yml example:**
-```yaml
-services:
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio-data:/data
-
-  immich-server:
-    # ... other configuration ...
-    environment:
-      IMMICH_STORAGE_BACKEND: s3
-      IMMICH_S3_BUCKET: immich-media
-      IMMICH_S3_REGION: us-east-1
-      IMMICH_S3_ENDPOINT: http://minio:9000
-      IMMICH_S3_ACCESS_KEY: minioadmin
-      IMMICH_S3_SECRET_KEY: minioadmin
-      IMMICH_S3_FORCE_PATH_STYLE: "true"
-    depends_on:
-      - minio
-
-volumes:
-  minio-data:
-```
-
-### Wasabi, Backblaze B2, or other S3-compatible services
-
-Most S3-compatible services work with Immich. You'll need to set the `IMMICH_S3_ENDPOINT` to your provider's endpoint.
-
-**Wasabi example:**
+**MinIO Example:**
 ```bash
 IMMICH_STORAGE_BACKEND=s3
 IMMICH_S3_BUCKET=immich-media
 IMMICH_S3_REGION=us-east-1
+IMMICH_S3_ENDPOINT=http://minio:9000
+IMMICH_S3_ACCESS_KEY=minioadmin
+IMMICH_S3_SECRET_KEY=minioadmin
+IMMICH_S3_FORCE_PATH_STYLE=true  # Required for MinIO
+```
+
+**Wasabi Example:**
+```bash
 IMMICH_S3_ENDPOINT=https://s3.us-east-1.wasabisys.com
-IMMICH_S3_ACCESS_KEY=your-wasabi-access-key
-IMMICH_S3_SECRET_KEY=your-wasabi-secret-key
+IMMICH_S3_ACCESS_KEY=your-wasabi-key
 ```
 
-**Backblaze B2 example:**
+**Backblaze B2 Example:**
 ```bash
-IMMICH_STORAGE_BACKEND=s3
-IMMICH_S3_BUCKET=immich-media
-IMMICH_S3_REGION=us-west-000
 IMMICH_S3_ENDPOINT=https://s3.us-west-000.backblazeb2.com
-IMMICH_S3_ACCESS_KEY=your-b2-key-id
-IMMICH_S3_SECRET_KEY=your-b2-application-key
+IMMICH_S3_REGION=us-west-000
 ```
 
-### Multi-tenant or Shared Bucket
+### Multi-tenant Setup
 
-If you want to run multiple Immich instances sharing the same S3 bucket, use the `IMMICH_STORAGE_PREFIX` variable to isolate data:
+Use `IMMICH_STORAGE_PREFIX` to isolate multiple instances in one bucket:
 
-**Instance 1:**
 ```bash
+# Instance 1
 IMMICH_STORAGE_PREFIX=tenant1
-```
 
-**Instance 2:**
-```bash
+# Instance 2  
 IMMICH_STORAGE_PREFIX=tenant2
 ```
-
-Objects will be stored with keys like:
-- `tenant1/library/user-abc/photo.jpg`
-- `tenant2/library/user-xyz/photo.jpg`
 
 ## Testing with LocalStack
 
@@ -270,65 +219,35 @@ If you're switching from local storage to S3:
 
 ## Troubleshooting
 
-### Server fails to start with "NoSuchBucket" error
+**Server fails to start with "NoSuchBucket"**
+- Verify bucket exists: `aws s3 ls s3://your-bucket-name`
+- Check credentials have correct permissions
+- Ensure `IMMICH_S3_REGION` matches bucket region
 
-**Cause:** The S3 bucket doesn't exist or Immich can't access it.
+**"Access Denied" errors**
+- Verify IAM policy includes: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket`, `s3:GetBucketLocation`
+- For IAM roles, ensure role is attached to ECS task or EC2 instance
 
-**Solution:**
-- Verify the bucket exists: `aws s3 ls s3://your-bucket-name`
-- Check your AWS credentials have the correct permissions
-- Ensure `IMMICH_S3_REGION` matches your bucket's region
+**Thumbnails not loading**
+- Check logs: `docker compose logs immich-server`
+- Verify files exist: `aws s3 ls s3://your-bucket-name/thumbs/`
+- Ensure container has write access to `/data` for caching
 
-### "Access Denied" errors
-
-**Cause:** Insufficient S3 permissions.
-
-**Solution:**
-- Verify your IAM policy includes all required actions: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket`, `s3:GetBucketLocation`
-- For IAM roles, ensure the role is properly attached to your ECS task or EC2 instance
-
-### Thumbnails not loading
-
-**Cause:** Files aren't being properly synced or cached.
-
-**Solution:**
-- Check container logs: `docker compose logs immich-server`
-- Verify files exist in S3: `aws s3 ls s3://your-bucket-name/thumbs/`
-- Ensure the server container has write access to the local `/data` directory for caching
-
-### Connection timeout with custom endpoint
-
-**Cause:** Network connectivity issues or incorrect endpoint URL.
-
-**Solution:**
-- Verify the endpoint URL is correct and accessible from the Immich container
-- For Docker networks, use the service name (e.g., `http://minio:9000`) instead of `localhost`
+**Connection timeout with custom endpoint**
+- Verify endpoint URL is accessible from container
+- Use service name (e.g., `http://minio:9000`) not `localhost` in Docker
 - Check firewall rules and security groups
 
-### "SignatureDoesNotMatch" with MinIO
+**"SignatureDoesNotMatch" with MinIO**
+- Set `IMMICH_S3_FORCE_PATH_STYLE=true` (required for MinIO/LocalStack)
 
-**Cause:** Path-style URLs not enabled.
+## Important Notes
 
-**Solution:**
-- Set `IMMICH_S3_FORCE_PATH_STYLE=true` in your environment variables
-- This is required for MinIO and LocalStack
+**Performance:** S3 operations require bandwidth. First access may be slower due to download, but subsequent access uses local cache.
 
-## Performance Considerations
+**Security:** Use IAM roles on AWS infrastructure, enable bucket versioning, block public access, and use minimum required permissions.
 
-- **Bandwidth:** S3 operations require internet bandwidth. Ensure you have sufficient bandwidth for your upload/download needs.
-- **Costs:** S3 storage and data transfer have associated costs. Monitor your AWS billing.
-- **Latency:** First access to files may be slower due to S3 download, but subsequent access uses local cache.
-- **Local Cache:** Immich caches downloaded files locally to improve performance. Ensure the `/data` volume has adequate space.
-
-## Security Best Practices
-
-1. **Use IAM roles** instead of access keys when running on AWS infrastructure
-2. **Enable bucket versioning** to protect against accidental deletions
-3. **Enable encryption** at rest for sensitive data
-4. **Block public access** to your S3 bucket
-5. **Use restrictive IAM policies** with minimum required permissions
-6. **Regularly rotate access keys** if not using IAM roles
-7. **Monitor access logs** for unusual activity
+**Costs:** Monitor S3 storage and data transfer costs in your AWS billing.
 
 ## Additional Resources
 
