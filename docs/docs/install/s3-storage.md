@@ -24,6 +24,43 @@ When configured with S3 storage:
 
 ### Basic Setup (AWS S3)
 
+#### Option 1: Using the pre-configured docker-compose.s3.yml
+
+1. **Create an S3 Bucket** in your AWS account:
+   ```bash
+   aws s3api create-bucket --bucket immich-media --region us-east-1
+   ```
+
+2. **Use the S3-ready docker-compose file:**
+   ```bash
+   # Copy the S3-configured docker-compose file
+   cp docker/docker-compose.s3.yml docker-compose.yml
+   
+   # Copy and configure environment file
+   cp docker/example.env .env
+   ```
+
+3. **Edit your `.env` file** to add S3 configuration:
+   ```bash
+   # Enable S3 storage backend
+   IMMICH_STORAGE_BACKEND=s3
+   
+   # S3 bucket configuration
+   IMMICH_S3_BUCKET=immich-media
+   IMMICH_S3_REGION=us-east-1
+   
+   # AWS credentials (if not using IAM roles)
+   IMMICH_S3_ACCESS_KEY=your-access-key-id
+   IMMICH_S3_SECRET_KEY=your-secret-access-key
+   ```
+
+4. **Start Immich:**
+   ```bash
+   docker compose up -d
+   ```
+
+#### Option 2: Update existing docker-compose.yml
+
 1. **Create an S3 Bucket** in your AWS account:
    ```bash
    aws s3api create-bucket --bucket immich-media --region us-east-1
