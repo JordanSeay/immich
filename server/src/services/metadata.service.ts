@@ -235,6 +235,9 @@ export class MetadataService extends BaseService {
       return;
     }
 
+    // Ensure the original file is available locally for exiftool
+    await this.storageRepository.ensureLocalFile(asset.originalPath);
+
     const [exifTags, stats] = await Promise.all([
       this.getExifTags(asset),
       this.storageRepository.stat(asset.originalPath),

@@ -28,3 +28,27 @@ vite.config.js.timestamp-*
 .pnpm-store
 .devcontainer/library
 .devcontainer/.env*
+
+# =============================================================================
+# AWS / Terraform / LocalStack
+# =============================================================================
+
+# Terraform state & working files
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfplan
+terraform/tfplan
+terraform/.terraform.tfstate.lock.info
+
+# Sensitive tfvars (keep templates, exclude personal overrides)
+terraform/environments/*.auto.tfvars
+terraform/environments/personal.tfvars
+
+# LocalStack data volumes
+localstack-data/
+
+# Docker data volumes (created by docker-compose)
+library/
+postgres/

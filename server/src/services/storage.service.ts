@@ -45,7 +45,9 @@ export class StorageService extends BaseService {
 
   @OnEvent({ name: 'AppBootstrap', priority: BootstrapEventPriority.StorageService })
   async onBootstrap() {
-    StorageCore.setMediaLocation(this.detectMediaLocation());
+    const mediaLocation = this.detectMediaLocation();
+    StorageCore.setMediaLocation(mediaLocation);
+    this.storageRepository.setMediaLocation(mediaLocation);
 
     await this.databaseRepository.withLock(DatabaseLock.SystemFileMounts, async () => {
       const flags =

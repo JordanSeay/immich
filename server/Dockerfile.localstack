@@ -1,0 +1,66 @@
+# LocalStack development build - server + web (no cli/plugins)
+# Using pinned base images for reproducibility and security scanning
+FROM ghcr.io/immich-app/base-server-dev:202601131104@sha256:8d907eb3fe10dba4a1e034fd0060ea68c01854d92fcc9debc6b868b98f888ba7 AS builder
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    CI=1 \
+    COREPACK_HOME=/tmp \
+    PNPM_HOME=/buildcache/pnpm-store \
+    PATH="/buildcache/pnpm-store:$PATH"
+
+RUN npm install --global corepack@latest && \
+    corepack enable pnpm && \
+    pnpm config set store-dir "$PNPM_HOME"
+
+FROM builder AS server
+
+WORKDIR /usr/src/app
+COPY ./server ./server/
+RUN --mount=type=cache,id=pnpm-server,target=/buildcache/pnpm-store \
+    --mount=type=bind,source=package.json,target=package.json \
+    --mount=type=bind,source=.pnpmfile.cjs,target=.pnpmfile.cjs \
+    --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
+    --mount=type=bind,source=pnpm-workspace.yaml,target=pnpm-workspace.yaml \
+    SHARP_IGNORE_GLOBAL_LIBVIPS=true pnpm --filter immich --frozen-lockfile build && \
+    SHARP_FORCE_GLOBAL_LIBVIPS=true pnpm --filter immich --frozen-lockfile --prod --no-optional deploy /output/server-pruned
+
+FROM builder AS web
+
+WORKDIR /usr/src/app
+COPY ./web ./web/
+COPY ./i18n ./i18n/
+COPY ./open-api ./open-api/
+RUN --mount=type=cache,id=pnpm-web,target=/buildcache/pnpm-store \
+    --mount=type=bind,source=package.json,target=package.json \
+    --mount=type=bind,source=.pnpmfile.cjs,target=.pnpmfile.cjs \
+    --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
+    --mount=type=bind,source=pnpm-workspace.yaml,target=pnpm-workspace.yaml \
+    SHARP_IGNORE_GLOBAL_LIBVIPS=true pnpm --filter @immich/sdk --filter immich-web --frozen-lockfile --force install && \
+    NODE_OPTIONS="--max-old-space-size=8192" pnpm --filter @immich/sdk --filter immich-web build
+
+# Production base image - pinned for reproducibility and security scanning
+FROM ghcr.io/immich-app/base-server-prod:202601131104@sha256:c649c5838b6348836d27db6d49cadbbc6157feae7a1a237180c3dec03577ba8f
+
+WORKDIR /usr/src/app
+ENV NODE_ENV=production \
+    NVIDIA_DRIVER_CAPABILITIES=all \
+    NVIDIA_VISIBLE_DEVICES=all
+
+COPY --from=server /output/server-pruned ./server
+COPY --from=web /usr/src/app/web/build /build/www
+# Stub core plugin - manifest must pass validation (PluginManifestDto)
+# The WASM file contains a minimal valid WebAssembly module header for testing
+RUN mkdir -p /build/corePlugin/dist && \
+    echo '{"name":"immich-core","version":"0.0.1","title":"Immich Core (stub)","description":"Stub core plugin for LocalStack testing","author":"Immich","wasm":{"path":"dist/plugin.wasm"}}' > /build/corePlugin/manifest.json && \
+    # Create minimal valid WASM file: magic number (0x00 0x61 0x73 0x6d) + version (0x01 0x00 0x00 0x00)
+    /bin/sh -c 'printf "\000asm\001\000\000\000" > /build/corePlugin/dist/plugin.wasm'
+COPY LICENSE /licenses/LICENSE.txt
+COPY LICENSE /LICENSE
+
+ENV PATH="${PATH}:/usr/src/app/server/bin"
+
+VOLUME /data
+EXPOSE 2283
+ENTRYPOINT ["tini", "--", "/bin/bash", "-c"]
+CMD ["for d in encoded-video library upload profile thumbs backups; do mkdir -p /data/$d && echo immich > /data/$d/.immich; done && start.sh"]
+
+HEALTHCHECK CMD immich-healthcheck

@@ -76,6 +76,7 @@ export class MaintenanceWorkerService {
     };
 
     StorageCore.setMediaLocation(this.detectMediaLocation());
+    this.storageRepository.setMediaLocation(StorageCore.getMediaLocation());
 
     this.maintenanceWebsocketRepository.setAuthFn(async (client) => this.authenticate(client.request.headers));
     this.maintenanceWebsocketRepository.setStatusUpdateFn((status) => (this.#status = status));

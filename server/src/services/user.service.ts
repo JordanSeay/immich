@@ -93,6 +93,9 @@ export class UserService extends BaseService {
   async createProfileImage(auth: AuthDto, file: Express.Multer.File): Promise<CreateProfileImageResponseDto> {
     const { profileImagePath: oldpath } = await this.findOrFail(auth.user.id, { withDeleted: false });
 
+    // Sync uploaded file from local disk to remote backend (e.g., S3)
+    await this.storageRepository.syncLocalFileToBackend(file.path);
+
     const user = await this.userRepository.update(auth.user.id, {
       profileImagePath: file.path,
       profileChangedAt: new Date(),
