@@ -195,6 +195,37 @@ Additional machine learning parameters can be tuned from the admin UI.
 
 :::
 
+## Storage
+
+| Variable                     | Description                                                                                 | Default | Containers |
+| :--------------------------- | :------------------------------------------------------------------------------------------ | :-----: | :--------- |
+| `IMMICH_STORAGE_BACKEND`     | Storage backend to use (`local` or `s3`)                                                    | `local` | server     |
+| `IMMICH_S3_BUCKET`           | S3 bucket name (required when using S3 backend)                                             |         | server     |
+| `IMMICH_S3_REGION`           | AWS region (required when using S3 backend, e.g., `us-east-1`)                              |         | server     |
+| `IMMICH_S3_ENDPOINT`         | Custom S3 endpoint URL (optional, for S3-compatible services like MinIO or LocalStack)      |         | server     |
+| `IMMICH_S3_ACCESS_KEY`       | AWS access key ID (optional, uses IAM role if not provided)                                 |         | server     |
+| `IMMICH_S3_SECRET_KEY`       | AWS secret access key (optional, uses IAM role if not provided)                             |         | server     |
+| `IMMICH_S3_FORCE_PATH_STYLE` | Use path-style URLs instead of virtual-hosted-style (`true` or `false`)                     | `true`  | server     |
+| `IMMICH_STORAGE_PREFIX`      | Key prefix for S3 objects (optional, useful for multi-tenant deployments or bucket sharing) |         | server     |
+
+:::info
+
+**S3 Storage Backend**
+
+Immich supports using Amazon S3 or S3-compatible services (MinIO, Wasabi, Backblaze B2, etc.) as the storage backend for media files.
+
+When using S3:
+- Media files (photos, videos, thumbnails) are stored in S3
+- System files (database, config) remain on the local filesystem
+- `IMMICH_S3_BUCKET` and `IMMICH_S3_REGION` are required
+- For AWS S3, you can use IAM roles instead of access keys (recommended for ECS/EC2 deployments)
+- For S3-compatible services, set `IMMICH_S3_ENDPOINT` to your service URL
+- Set `IMMICH_S3_FORCE_PATH_STYLE=true` for services that require path-style URLs (required for LocalStack and MinIO)
+
+For detailed setup instructions, see the [S3 Storage Guide](/install/s3-storage).
+
+:::
+
 ## Prometheus
 
 | Variable                   | Description                                                                                                           | Default | Containers | Workers            |
