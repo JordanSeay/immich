@@ -250,14 +250,15 @@ If you're switching from local storage to S3:
 
 1. **Back up your existing data:**
    ```bash
-   # Backup the upload directory
-   tar -czf immich-backup-$(date +%Y%m%d).tar.gz /path/to/upload/directory
+   # Backup the upload directory (use your actual UPLOAD_LOCATION from .env)
+   tar -czf immich-backup-$(date +%Y%m%d).tar.gz ${UPLOAD_LOCATION:-./library}
    ```
 
 2. **Upload existing files to S3:**
    ```bash
    # Sync local files to S3 (preserving directory structure)
-   aws s3 sync /path/to/upload/directory s3://immich-media/ --exclude ".*"
+   # Replace ./library with your UPLOAD_LOCATION value
+   aws s3 sync ${UPLOAD_LOCATION:-./library} s3://immich-media/ --exclude ".*"
    ```
 
 3. **Update environment variables** to enable S3 backend

@@ -26,7 +26,8 @@ This directory contains various Docker Compose configurations for different depl
   - Hot-reload support for code changes
   - Development-specific settings
 
-- **`docker-compose.localstack.yml`** - Testing with LocalStack (S3 emulation)
+- **`../docker-compose.localstack.yml`** - Testing with LocalStack (S3 emulation)
+  - Located in project root (not in docker/ directory)
   - Test S3 integration without AWS account
   - Includes LocalStack container for S3 emulation
   - Run `./scripts/init-localstack.sh` after starting

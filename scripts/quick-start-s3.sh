@@ -17,8 +17,8 @@ update_env() {
   local value="$2"
   local file="$PROJECT_ROOT/.env"
   
-  # Escape special characters for sed
-  local escaped_value=$(printf '%s\n' "$value" | sed 's/[[\.*^$/]/\\&/g')
+  # Escape special characters for sed (note: [] need to be escaped individually)
+  local escaped_value=$(printf '%s\n' "$value" | sed 's/[\.*^$/\[\]]/\\&/g')
   
   # Use | as delimiter to avoid issues with / in values
   if grep -q "^# ${key}=" "$file"; then
