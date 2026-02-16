@@ -24,7 +24,10 @@ export AWS_DEFAULT_REGION="$REGION"
 
 # Check AWS CLI is available
 if ! command -v aws >/dev/null 2>&1; then
-  echo "ERROR: AWS CLI is not installed. Install it with: brew install awscli (macOS) or apt-get install awscli (Linux)"
+  echo "ERROR: AWS CLI is not installed. Install it with:"
+  echo "  - macOS: brew install awscli"
+  echo "  - Ubuntu/Debian: apt install awscli"
+  echo "  - Other: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
   exit 1
 fi
 

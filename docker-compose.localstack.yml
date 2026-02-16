@@ -116,7 +116,7 @@ services:
         aws --endpoint-url=http://localstack:4566 s3api head-bucket --bucket immich-media 2>/dev/null || \
           aws --endpoint-url=http://localstack:4566 s3api create-bucket --bucket immich-media --region us-east-1
         for d in encoded-video library upload profile thumbs backups; do
-          echo immich | aws --endpoint-url=http://localstack:4566 s3 cp - s3://immich-media/$d/.immich
+          echo immich | aws --endpoint-url=http://localstack:4566 s3 cp - s3://immich-media/$$d/.immich
         done
         echo 'S3 bucket and mount check files ready'
     depends_on:

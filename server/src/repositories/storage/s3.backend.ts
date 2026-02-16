@@ -1,4 +1,5 @@
 import {
+  CompleteMultipartUploadCommandOutput,
   CopyObjectCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
@@ -24,7 +25,7 @@ interface S3ReadStream extends PassThrough {
 }
 
 interface S3WriteStream extends PassThrough {
-  uploadPromise: Promise<any>;
+  uploadPromise: Promise<CompleteMultipartUploadCommandOutput>;
 }
 
 export interface S3BackendConfig {
@@ -313,7 +314,7 @@ export class S3StorageBackend implements StorageBackend {
               Quiet: true,
             },
           }),
-        ).then(() => {});
+        ).then(() => undefined);
         
         deleteBatches.push(deletePromise);
       }
