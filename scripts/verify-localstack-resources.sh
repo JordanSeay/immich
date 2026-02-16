@@ -8,13 +8,13 @@ set -euo pipefail
 #   ./scripts/verify-localstack-resources.sh
 #
 
-ENDPOINT="http://localhost:4566"
-REGION="us-east-1"
-BUCKET="immich-media"
+ENDPOINT="${LOCALSTACK_ENDPOINT:-http://localhost:4566}"
+REGION="${AWS_REGION:-us-east-1}"
+BUCKET="${S3_BUCKET:-immich-media}"
 
-export AWS_ACCESS_KEY_ID=test
-export AWS_SECRET_ACCESS_KEY=test
-export AWS_DEFAULT_REGION=$REGION
+export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
+export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
+export AWS_DEFAULT_REGION="$REGION"
 
 PASS=0
 FAIL=0
@@ -38,43 +38,45 @@ echo "=========================================="
 echo ""
 echo "S3:"
 check "Bucket '$BUCKET' exists" \
-  aws --endpoint-url=$ENDPOINT s3api head-bucket --bucket $BUCKET
+  aws --endpoint-url="$ENDPOINT" s3api head-bucket --bucket "$BUCKET"
 
 check "Bucket versioning enabled" \
-  bash -c "aws --endpoint-url=$ENDPOINT s3api get-bucket-versioning --bucket $BUCKET | grep -q Enabled"
+  sh -c "aws --endpoint-url='$ENDPOINT' s3api get-bucket-versioning --bucket '$BUCKET' | grep -q Enabled"
 
 check "Public access blocked" \
-  bash -c "aws --endpoint-url=$ENDPOINT s3api get-public-access-block --bucket $BUCKET | grep -q true"
+  sh -c "aws --endpoint-url='$ENDPOINT' s3api get-public-access-block --bucket '$BUCKET' | grep -q true"
 
 echo ""
 echo "IAM:"
 check "ECS execution role exists" \
-  aws --endpoint-url=$ENDPOINT iam get-role --role-name immich-ecs-execution-role
+  aws --endpoint-url="$ENDPOINT" iam get-role --role-name immich-ecs-execution-role
 
 check "ECS task role exists" \
-  aws --endpoint-url=$ENDPOINT iam get-role --role-name immich-ecs-task-role
+  aws --endpoint-url="$ENDPOINT" iam get-role --role-name immich-ecs-task-role
 
 check "S3 access policy attached" \
-  aws --endpoint-url=$ENDPOINT iam get-role-policy --role-name immich-ecs-task-role --policy-name immich-s3-access
+  aws --endpoint-url="$ENDPOINT" iam get-role-policy --role-name immich-ecs-task-role --policy-name immich-s3-access
 
 echo ""
 echo "Secrets Manager:"
 check "Database credentials secret exists" \
-  aws --endpoint-url=$ENDPOINT secretsmanager describe-secret --secret-id immich/database-credentials
+  aws --endpoint-url="$ENDPOINT" secretsmanager describe-secret --secret-id immich/database-credentials
 
 echo ""
 echo "S3 Read/Write:"
-echo "test-content" | aws --endpoint-url=$ENDPOINT s3 cp - s3://$BUCKET/__verify_test.txt 2>/dev/null
+echo "test-content" | aws --endpoint-url="$ENDPOINT" s3 cp - "s3://$BUCKET/__verify_test.txt"
 check "Can write to S3 bucket" \
-  aws --endpoint-url=$ENDPOINT s3api head-object --bucket $BUCKET --key __verify_test.txt
+  aws --endpoint-url="$ENDPOINT" s3api head-object --bucket "$BUCKET" --key __verify_test.txt
 
-CONTENT=$(aws --endpoint-url=$ENDPOINT s3 cp s3://$BUCKET/__verify_test.txt - 2>/dev/null)
+CONTENT=$(aws --endpoint-url="$ENDPOINT" s3 cp "s3://$BUCKET/__verify_test.txt" -)
+# Trim whitespace and compare
+CONTENT_TRIMMED=$(echo "$CONTENT" | tr -d '\n')
 check "Can read from S3 bucket" \
-  test "$CONTENT" = "test-content"
+  test "$CONTENT_TRIMMED" = "test-content"
 
-aws --endpoint-url=$ENDPOINT s3 rm s3://$BUCKET/__verify_test.txt 2>/dev/null
+aws --endpoint-url="$ENDPOINT" s3 rm "s3://$BUCKET/__verify_test.txt"
 check "Can delete from S3 bucket" \
-  bash -c "! aws --endpoint-url=$ENDPOINT s3api head-object --bucket $BUCKET --key __verify_test.txt 2>/dev/null"
+  sh -c "! aws --endpoint-url='$ENDPOINT' s3api head-object --bucket '$BUCKET' --key __verify_test.txt 2>/dev/null"
 
 echo ""
 echo "=========================================="

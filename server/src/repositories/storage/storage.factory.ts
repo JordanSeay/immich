@@ -49,7 +49,7 @@ export class StorageBackendFactory {
    *   IMMICH_S3_ENDPOINT      - Custom endpoint URL (for LocalStack)
    *   IMMICH_S3_ACCESS_KEY    - AWS access key (optional, uses IAM role if not set)
    *   IMMICH_S3_SECRET_KEY    - AWS secret key (optional, uses IAM role if not set)
-   *   IMMICH_S3_FORCE_PATH_STYLE - Use path-style URLs (default: true, required for LocalStack)
+   *   IMMICH_S3_FORCE_PATH_STYLE - Use path-style URLs: "true" or "false" (default: "true", required for LocalStack)
    *   IMMICH_STORAGE_PREFIX   - Key prefix for multi-tenant isolation
    */
   static createFromEnv(): StorageBackend {
@@ -66,6 +66,7 @@ export class StorageBackendFactory {
     if (backendType === 's3') {
       const bucket = process.env.IMMICH_S3_BUCKET;
       const region = process.env.IMMICH_S3_REGION;
+      const endpoint = process.env.IMMICH_S3_ENDPOINT;
 
       if (!bucket || !region) {
         throw new Error(
@@ -74,15 +75,30 @@ export class StorageBackendFactory {
         );
       }
 
+      // Validate endpoint URL format if provided
+      if (endpoint) {
+        try {
+          new URL(endpoint);
+        } catch {
+          throw new Error(
+            `Invalid IMMICH_S3_ENDPOINT: '${endpoint}'. Must be a valid URL (e.g., http://localhost:4566)`,
+          );
+        }
+      }
+
+      // Parse forcePathStyle with proper boolean handling
+      const forcePathStyleEnv = process.env.IMMICH_S3_FORCE_PATH_STYLE?.toLowerCase();
+      const forcePathStyle = forcePathStyleEnv === undefined || forcePathStyleEnv === 'true';
+
       this.instance = this.create({
         type: 's3',
         s3: {
           bucket,
           region,
-          endpoint: process.env.IMMICH_S3_ENDPOINT,
+          endpoint,
           accessKeyId: process.env.IMMICH_S3_ACCESS_KEY,
           secretAccessKey: process.env.IMMICH_S3_SECRET_KEY,
-          forcePathStyle: process.env.IMMICH_S3_FORCE_PATH_STYLE !== 'false',
+          forcePathStyle,
           prefix: process.env.IMMICH_STORAGE_PREFIX,
         },
       });

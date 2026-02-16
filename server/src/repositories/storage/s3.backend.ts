@@ -1,4 +1,5 @@
 import {
+  CompleteMultipartUploadCommandOutput,
   CopyObjectCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
@@ -15,6 +16,17 @@ import { Upload } from '@aws-sdk/lib-storage';
 import { Stats } from 'node:fs';
 import { PassThrough, Readable, Writable } from 'node:stream';
 import { DiskUsageStats, StorageBackend } from 'src/repositories/storage/storage.backend';
+
+/**
+ * Extended PassThrough stream with promise for tracking async S3 operations.
+ */
+interface S3ReadStream extends PassThrough {
+  fetchPromise: Promise<void>;
+}
+
+interface S3WriteStream extends PassThrough {
+  uploadPromise: Promise<CompleteMultipartUploadCommandOutput>;
+}
 
 export interface S3BackendConfig {
   bucket: string;
@@ -54,7 +66,10 @@ export class S3StorageBackend implements StorageBackend {
     const clientConfig: S3ClientConfig = {
       region: config.region,
       forcePathStyle: config.forcePathStyle ?? true,
-      // TODO: Configure maxAttempts (e.g. 5) and custom retry strategy for production.
+      maxAttempts: 5,
+      requestHandler: {
+        requestTimeout: 30_000, // 30 seconds for individual requests
+      },
     };
 
     if (config.endpoint) {
@@ -100,7 +115,7 @@ export class S3StorageBackend implements StorageBackend {
   }
 
   createReadStream(filepath: string): Readable {
-    const passthrough = new PassThrough();
+    const passthrough = new PassThrough() as S3ReadStream;
     const key = this.toKey(filepath);
 
     // Start the async fetch and pipe to the passthrough stream.
@@ -122,13 +137,13 @@ export class S3StorageBackend implements StorageBackend {
       });
 
     // Attach the promise so callers can optionally await the fetch start
-    (passthrough as any).fetchPromise = fetchPromise;
+    passthrough.fetchPromise = fetchPromise;
 
     return passthrough;
   }
 
   createWriteStream(filepath: string): Writable {
-    const passthrough = new PassThrough();
+    const passthrough = new PassThrough() as S3WriteStream;
     const key = this.toKey(filepath);
 
     // Use multipart upload for streaming writes
@@ -149,7 +164,7 @@ export class S3StorageBackend implements StorageBackend {
     uploadPromise.then(() => passthrough.emit('uploadComplete')).catch((error) => passthrough.destroy(error));
 
     // Attach the promise for programmatic access
-    (passthrough as any).uploadPromise = uploadPromise;
+    passthrough.uploadPromise = uploadPromise;
 
     return passthrough;
   }
@@ -188,8 +203,8 @@ export class S3StorageBackend implements StorageBackend {
   // NOTE: For overwrite:false we use S3 conditional writes (If-None-Match: '*')
   // to avoid a non-atomic check-then-write race. When running against LocalStack,
   // If-None-Match may not be fully supported, so we fall back to check-then-write.
-  // TODO: Set ContentType using mime type detection for proper serving via
-  // presigned URLs or CloudFront.
+  // This fallback has a race condition but is acceptable for local development.
+  // In production with AWS S3, the atomic conditional write is used.
   async writeFile(filepath: string, data: Buffer, options?: { overwrite?: boolean }): Promise<void> {
     const key = this.toKey(filepath);
     const overwrite = options?.overwrite ?? true;
@@ -215,7 +230,10 @@ export class S3StorageBackend implements StorageBackend {
         throw eexist;
       }
 
-      // If IfNoneMatch is not supported (e.g. LocalStack), fall back to check-then-write
+      // If IfNoneMatch is not supported (e.g. LocalStack), fall back to check-then-write.
+      // WARNING: This has a race condition — another process could create the file
+      // between our existence check and the subsequent write. This is only acceptable
+      // for local development with LocalStack. Production AWS S3 uses atomic writes above.
       if (!overwrite && error?.name === 'NotImplemented') {
         const exists = await this.checkFileExists(filepath);
         if (exists) {
@@ -272,7 +290,10 @@ export class S3StorageBackend implements StorageBackend {
 
     // List and batch-delete all objects under the prefix.
     // DeleteObjectsCommand supports up to 1000 keys per call.
+    // We parallelize deletion batches for better performance.
+    const deleteBatches: Promise<void>[] = [];
     let continuationToken: string | undefined;
+    
     do {
       const response = await this.client.send(
         new ListObjectsV2Command({
@@ -284,7 +305,8 @@ export class S3StorageBackend implements StorageBackend {
       );
 
       if (response.Contents && response.Contents.length > 0) {
-        await this.client.send(
+        // Start deletion in parallel (don't await yet)
+        const deletePromise = this.client.send(
           new DeleteObjectsCommand({
             Bucket: this.bucket,
             Delete: {
@@ -292,11 +314,16 @@ export class S3StorageBackend implements StorageBackend {
               Quiet: true,
             },
           }),
-        );
+        ).then(() => undefined);
+        
+        deleteBatches.push(deletePromise);
       }
 
       continuationToken = response.NextContinuationToken;
     } while (continuationToken);
+    
+    // Wait for all deletion batches to complete
+    await Promise.all(deleteBatches);
   }
 
   async checkFileExists(filepath: string, _mode?: number): Promise<boolean> {
@@ -304,12 +331,15 @@ export class S3StorageBackend implements StorageBackend {
     try {
       await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
       return true;
-    } catch (error) {
-      if (
+    } catch (error: any) {
+      // Check for 404 status using multiple approaches for compatibility
+      // with both AWS S3 and LocalStack
+      const is404 =
         error instanceof NotFound ||
-        (error as any)?.name === 'NotFound' ||
-        (error as any)?.$metadata?.httpStatusCode === 404
-      ) {
+        error?.name === 'NotFound' ||
+        error?.$metadata?.httpStatusCode === 404;
+      
+      if (is404) {
         return false;
       }
       throw error;
@@ -358,24 +388,25 @@ export class S3StorageBackend implements StorageBackend {
 
   async utimes(_filepath: string, _atime: Date, _mtime: Date): Promise<void> {
     // S3 doesn't support setting access/modification times directly.
-    // This is a no-op. Metadata is managed by S3 automatically.
-    // For full fidelity, we could copy the object with updated metadata,
-    // but that's expensive and unnecessary for Immich's use case.
+    // Metadata is managed by S3 automatically based on object creation/modification.
+    // Callers should not rely on utimes() having any effect when using S3 storage.
   }
 
   mkdirSync(_filepath: string): void {
-    // S3 doesn't have real directories — no-op
+    // S3 has no concept of directories — objects use prefixes for hierarchical naming.
+    // This is a no-op for compatibility with the StorageBackend interface.
   }
 
   existsSync(_filepath: string): boolean {
-    // Synchronous existence check is not possible with S3.
-    // This is used by mkdirSync in the local backend.
-    // Since mkdirSync is also a no-op for S3, this returns true.
+    // Synchronous existence checks are not possible with S3's async API.
+    // This method is only used by mkdirSync which is also a no-op for S3.
+    // Always returns true for compatibility.
     return true;
   }
 
   async removeEmptyDirs(_directory: string, _self?: boolean): Promise<void> {
-    // S3 doesn't have directories — no-op
+    // S3 has no concept of directories — this is a no-op.
+    // Empty "directories" (prefixes with no objects) don't exist in S3.
   }
 
   async readdir(dirpath: string): Promise<string[]> {
